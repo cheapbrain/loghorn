@@ -25,13 +25,16 @@ enum Case {
 	DISCRETE,
 };
 
+#define FALSEHOOD 0
+#define TRUTH 1
+
 struct Formula {
 	FormulaType type;
 	int id;
 
 	static Formula create(FormulaType type, int id) { return { type, id }; }
-	static Formula truth() { return { LETTER, 1 }; }
-	static Formula falsehood() { return { LETTER, 0 }; }
+	static Formula truth() { return { LETTER, TRUTH }; }
+	static Formula falsehood() { return { LETTER, FALSEHOOD }; }
 };
 
 typedef std::pair<int, int> Interval;
@@ -198,7 +201,7 @@ void exitError(const char* text, int line, const std::string& token) {
 	exit(-1);
 }
 
-InputClauses parseFile(char* path) {
+InputClauses parseFile(const char* path) {
 	std::ifstream fp(path);
 	std::cout << "Reading file: " << path << "\n";
 	int lineNum = 0;
@@ -248,10 +251,21 @@ Clause newClause(const std::vector<int>& arr) {
 }
 
 int main(int argc, char **argv) {
-
-	if (argc != 2) {
+	if (argc < 2) {
 		printf("Type the name of the file you want to load.\n");
 		return 1;
+	}
+
+	auto caseType = FINITE;
+
+	if (argc > 2) {
+		if (strcmp(argv[2], "FINITE") == 0) caseType = FINITE;
+		else if (strcmp(argv[2], "NATURAL") == 0) caseType = NATURAL;
+		else if (strcmp(argv[2], "DISCRETE") == 0) caseType = DISCRETE;
+		else {
+			printf("The case \"%s\" is not valid.\n", argv[2]);
+			return 1;
+		}
 	}
 
 	auto filename = argv[1];
@@ -270,7 +284,6 @@ int main(int argc, char **argv) {
 	}
 	printf("---------------\n");
 
-	Case caseType = FINITE;
 	bool result = check(phi, caseType);
 	printf("result: %s", result ? "SATISFIABLE" : "NON SATISFIABLE");
 
@@ -313,7 +326,7 @@ bool saturate(int d, int x, int y, const State& state) {
 	IntervalMap hi, lo;
 
 	printf("---------------------------\n");
-	printf("Starting SATURATE size:%d\n", d);
+	printf("Starting SATURATE size:%d, starting interval: [%d, %d]\n", d, x, y);
 
 	for (int z = 0; z < d - 1; z++) {
 		for (int t = z + 1; t < d; t++) {
@@ -342,10 +355,11 @@ bool saturate(int d, int x, int y, const State& state) {
 				std::vector<Formula> formulas (hi[zt].begin(), hi[zt].end());
 				for (auto f : formulas) {
 
-					if (f.type == LETTER && f.id == 1) {
+					if (f.type == LETTER && f.id == TRUTH) {
 						hi[zt].erase(f);
 
-					} else if (f.type == LETTER && f.id == 0) {
+					} else if (f.type == LETTER && f.id == FALSEHOOD) {
+						lo[zt].insert(f);
 						printf("found FALSE literal in interval[%d, %d]:\n", z, t);
 						printState(state.phi, lo);
 						return false;
@@ -410,17 +424,23 @@ bool extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
 		max = d - 2;
 
 		for (int z = min; z < max; z++) {
-			hi[std::make_pair(z, max+1)] = hi[std::make_pair(z, max)];
-			lo[std::make_pair(z, max+1)] = lo[std::make_pair(z, max)];
+			for (auto f : hi[std::make_pair(z, max)]) {
+				if (hi[std::make_pair(z, max+1)].insert(f).second) changed = true;
+			}
+			for (auto f : lo[std::make_pair(z, max)]) {
+				if (lo[std::make_pair(z, max+1)].insert(f).second) changed = true;
+			}
 		}
 
 		Interval last = std::make_pair(max, max+1);
 		for (auto f : lo[last]) {
 			if (f.type == LETTER) {
 				if (lo[last].insert(Formula::create(BOXA, f.id)).second) changed = true;
-			} else if (f.type == BOXA) {
+			} 
+			else if (f.type == BOXA) {
 				if (lo[last].insert(Formula::create(LETTER, f.id)).second) changed = true;
-			} else if (f.type == BOXA_BAR) {
+			} 
+			else if (f.type == BOXA_BAR) {
 				if (lo[last].insert(Formula::create(LETTER, f.id)).second) changed = true;
 			}
 		}
@@ -430,8 +450,12 @@ bool extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
 			max = d - 1;
 
 			for (int z = min + 1; z <= max; z++) {
-				hi[std::make_pair(0, z)] = hi[std::make_pair(1, z)];
-				lo[std::make_pair(0, z)] = lo[std::make_pair(1, z)];
+				for (auto f : hi[std::make_pair(1, z)]) {
+					if (hi[std::make_pair(0, z)].insert(f).second) changed = true;
+				}
+				for (auto f : lo[std::make_pair(1, z)]) {
+					if (lo[std::make_pair(0, z)].insert(f).second) changed = true;
+				}
 			}
 
 			Interval first = std::make_pair(0, 1);
@@ -461,9 +485,8 @@ bool extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
 				}
 			}
 			if (found) {
-				if (state.caseType == FINITE || z + 1 < d)
-					for (int r = 0; r < z; r++)
-						if (lo[std::make_pair(r, z)].insert(f).second) changed = true;
+				for (int r = 0; r < z; r++)
+					if (lo[std::make_pair(r, z)].insert(f).second) changed = true;
 			}
 		}
 
@@ -477,9 +500,8 @@ bool extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
 				}
 			}
 			if (found) {
-				if (state.caseType != DISCRETE || z > 0)
-					for (int t = z + 1; t < d; t++)
-						if (lo[std::make_pair(z, t)].insert(f).second) changed = true;
+				for (int t = z + 1; t < d; t++)
+					if (lo[std::make_pair(z, t)].insert(f).second) changed = true;
 			}
 		}
 
