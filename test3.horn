@@ -1,5 +1,7 @@
 
 p
 
+[U] p -> [A]p
+[U] p -> [B]p
 [U] p & [A]F -> F
 [U] p & [B]F -> F
