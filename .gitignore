@@ -3,3 +3,5 @@
 *.ilk
 *.pdb
 *.obj
+*.exe
+horn

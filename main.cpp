@@ -1,270 +1,10 @@
-#include <iostream>
-#include <fstream>
-#include <streambuf>
-#include <string>
-#include <cstring>
-#include <cctype>
-#include <vector>
-#include <queue>
-#include <unordered_map>
-#include <unordered_set>
-#include <iterator>
-#include <algorithm>
-#include <thread>
-#include <mutex>
 
-enum FormulaType {
-	LETTER,
-	BOXA,
-	BOXA_BAR,
-	CLAUSE,
-	INVALID,
-};
+#include "horn.hpp"
 
-enum Case {
-	FINITE,
-	NATURAL,
-	DISCRETE,
-	ALL,
-};
-
-const char *caseStrings[] = {
-	"FINITE",
-	"NATURAL",
-	"DISCRETE",
-	"ALL",
-};
-
-
-#define FALSEHOOD 0
-#define TRUTH 1
-
-struct Formula {
-	FormulaType type;
-	int id;
-
-	static Formula create(FormulaType type, int id) { return { type, id }; }
-	static Formula truth() { return { LETTER, TRUTH }; }
-	static Formula falsehood() { return { LETTER, FALSEHOOD }; }
-};
-
-typedef std::pair<int, int> Interval;
-typedef std::vector<Formula> Clause;
-
-struct InputClauses {
-	std::vector<Clause> rules;
-	std::vector<Formula> facts;
-	std::vector<std::string> labels;
-};
-
-struct State {
-	Case caseType;
-	InputClauses& phi;
-	std::vector<Formula> boxa;
-	std::vector<Formula> boxaBar;
-};
-
-inline bool operator==(const Formula& lhs, const Formula& rhs) {
-	return lhs.type == rhs.type && lhs.id == rhs.id;
-}
-bool operator!=(const Formula& lhs, const Formula& rhs) {
-	return !operator==(lhs, rhs);
-}
-std::size_t i2hash(int a, int b) {
-	return std::hash<int>()(a) ^ std::hash<int>()(b);
-}
-struct IntervalHash {
-	std::size_t operator()(const Interval &i) const { return i2hash(i.first, i.second); }
-};
-struct FormulaHash {
-	std::size_t operator()(const Formula &f) const { return i2hash(f.id, f.type); }
-};
-
-typedef std::unordered_set<Formula, FormulaHash> FormulaSet;
-typedef std::unordered_map<Interval, FormulaSet, IntervalHash> IntervalMap;
-typedef std::queue<Interval> IntervalQueue;
-
-bool check(InputClauses& phi, Case caseType);
-bool saturate(int d, int x, int y, const State& phi);
-int extend(int d, IntervalMap& hi, IntervalMap& lo, const State& phi);
-
-void printFormula(const InputClauses& phi, const Formula f, bool universal) {
-	auto prefix = universal ? "[U] " : "";
-	if (f.type == CLAUSE) {
-		Clause c = phi.rules[f.id];
-		for (auto& l : c) {
-			if (l == c.back())       printf("%s", " -> ");
-			else if (l == c.front()) printf("%s", prefix);
-			else                     printf("%s", " & ");
-			printFormula(phi, l, false);
-		}
-		return;
-
-	} else if (f.type == BOXA) {
-		printf("[A]");
-	} else if (f.type == BOXA_BAR) {
-		printf("[P]");
-	}
-
-	printf("%s", phi.labels[f.id].c_str());
-}
-
-void printInterval(const InputClauses& phi, const Interval& interval, const FormulaSet& formulas) {
-	if (formulas.size() == 0) return;
-	printf("[%d, %d]: ",interval.first, interval.second);
-	for(auto f: formulas) {
-		printf("\n\t");
-		printFormula(phi, f, false);
-	}
-	printf("\n");
-}
-
-void printState(const InputClauses& phi, const IntervalMap &map) {
-	for(auto &i : map) {
-		printInterval(phi, i.first, i.second);
-	}
-	printf("\n");
-}
-
-struct TokInfo {
-	int pos;
-	int len;
-	bool alphanum;
-};
-
-bool findToken(const char* text, TokInfo& state) {
-	state.pos += state.len;
-	state.len = 0;
-
-	int i = state.pos;
-	while(1) {
-		if (text[i] == '\0') return false;
-		if (!std::isspace(text[i])) break;
-		i++;
-	}
-	state.pos = i;
-
-	enum {LETTER, OPERATOR, OTHER};
-	int type = OTHER;
-	if (std::isalnum(text[i])) type = LETTER;
-	else if (text[i] == '[') type = OPERATOR;
-
-	while (text[i] != '\0') {
-		char c = text[i];
-		if (std::isspace(c)) break;
-		bool found = false;
-		switch(type) {
-			case LETTER: 
-				found = (!std::isalnum(c));
-				break;
-			case OPERATOR: 
-				if (c == ']') {
-					found = true;
-					i++;
-				}
-				break;
-			case OTHER: 
-				found = (std::isalnum(c) || c == '[');
-				break;
-		}
-		if (found) break;
-		i++;
-	}
-
-	state.len = i - state.pos;
-	return true;
-}
-
-Formula parseFormula(const std::string& line, TokInfo& token, InputClauses& phi) {
-	Formula f = {};
-	std::string text = line.substr(token.pos, token.len);
-
-	if (text.compare("[A]") == 0) {
-		f.type = BOXA;
-	} else if (text.compare("[B]") == 0) {
-		f.type = BOXA_BAR;
-	} else {
-		f.type = LETTER;
-	}
-
-	if (f.type != LETTER) {
-		findToken(line.c_str(), token);
-		text = line.substr(token.pos, token.len);
-	}
-
-	for(auto c = text.begin(); c != text.end(); c++) {
-		if (!std::isalnum(*c)) return Formula::create(INVALID, 0);
-	}
-
-	for(size_t i = 0; i < phi.labels.size(); i++) {
-		if (text.compare(phi.labels[i]) == 0) {
-			f.id = i;
-			return f;
-		}
-	}
-
-	f.id = phi.labels.size();
-	phi.labels.push_back(text);
-	return f;
-}
-
-void exitError(const char* text, int line, const std::string& token) {
-	std::cerr << "Error on line " << line << ", at \"" << token << "\": " << text << std::endl;
-	exit(-1);
-}
-
-InputClauses parseFile(const char* path) {
-	std::ifstream fp(path);
-	std::cout << "Reading file: " << path << "\n";
-	int lineNum = 0;
-	InputClauses phi = {};
-	phi.labels.push_back("F");
-	phi.labels.push_back("T");
-	std::string line;
-
-	while (std::getline(fp, line)) {
-		auto cline = line.c_str();
-		TokInfo token = {};
-		lineNum++;
-
-		bool hasNext = findToken(cline, token);
-		if (!hasNext) continue;
-		
-		if (line.substr(token.pos, token.len).compare("[U]") != 0) {
-			auto f = parseFormula(line, token, phi);
-			if (f.type == INVALID) exitError("This is not a valid formula.", lineNum, line.substr(token.pos, token.len));
-			phi.facts.push_back(f);
-			continue;
-		} 
-
-		Clause clause = {};
-		do {
-			if (!findToken(cline, token)) exitError("Missing formula at the end of line.", lineNum, line);
-
-			auto f = parseFormula(line, token, phi);
-			if (f.type == INVALID) exitError("This is not a valid formula.", lineNum, line.substr(token.pos, token.len));
-			clause.push_back(f);
-
-			hasNext = findToken(cline, token);
-		} while (hasNext);
-
-		phi.rules.push_back(clause);
-	}
-
-	return phi;
-}
-
-Clause newClause(const std::vector<int>& arr) {
-	Clause c;
-	for (auto i = 0U; i < arr.size(); i += 2) {
-		c.push_back(Formula::create(static_cast<FormulaType>(arr[i]), arr[i+1]));
-	}
-	return c;
-}
-
+#include "utils.cpp"
+#include "generate.cpp"
 
 std::mutex stdout_mutex;
-
 
 int main(int argc, char **argv) {
 
@@ -310,7 +50,9 @@ int main(int argc, char **argv) {
 
 	std::vector<std::thread> threads;
 	for (auto caseType : caseTypes) {
+		stdout_mutex.lock();
 		printf("Starting check of the %s case.\n", caseStrings[caseType]);
+		stdout_mutex.unlock();
 		std::thread th(check, std::ref(phi), caseType);
 		threads.push_back(std::move(th));
 	}
@@ -320,11 +62,6 @@ int main(int argc, char **argv) {
 	};
 
 	printf("Done.\n");
-	return 0;
-
-
-
-
 	return 0;
 }
 
@@ -437,6 +174,7 @@ bool saturate(int d, int x, int y, const State& state) {
 							if (hi[zt].insert(last).second) changed = true;
 						}
 					}
+
 				}
 
 				int res = extend(d, hi, lo, state);
@@ -451,9 +189,12 @@ bool saturate(int d, int x, int y, const State& state) {
 
 	}
 
+	stdout_mutex.lock();
 	printf("The formula is SATISFIABLE in the %s case, with size %d and starting interval [%d, %d]:\n", 
-			caseStrings[state.caseType], d, x, y);
-	printState(state.phi, lo);
+			caseStrings[state.caseType], d, x, y
+			);
+	printState(state.phi, lo, d);
+	stdout_mutex.unlock();
 	return true;
 }
 
