@@ -10,6 +10,8 @@
 #include <unordered_set>
 #include <iterator>
 #include <algorithm>
+#include <thread>
+#include <mutex>
 
 enum FormulaType {
 	LETTER,
@@ -23,7 +25,16 @@ enum Case {
 	FINITE,
 	NATURAL,
 	DISCRETE,
+	ALL,
 };
+
+const char *caseStrings[] = {
+	"FINITE",
+	"NATURAL",
+	"DISCRETE",
+	"ALL",
+};
+
 
 #define FALSEHOOD 0
 #define TRUTH 1
@@ -92,7 +103,7 @@ void printFormula(const InputClauses& phi, const Formula f, bool universal) {
 	} else if (f.type == BOXA) {
 		printf("[A]");
 	} else if (f.type == BOXA_BAR) {
-		printf("[B]");
+		printf("[P]");
 	}
 
 	printf("%s", phi.labels[f.id].c_str());
@@ -251,21 +262,36 @@ Clause newClause(const std::vector<int>& arr) {
 	return c;
 }
 
+
+std::mutex stdout_mutex;
+
+
 int main(int argc, char **argv) {
 
 	auto filename = "test.horn";
-	auto caseType = NATURAL;
+	auto caseType = ALL;
+
+	if (argc > 1) {
+		filename = argv[1];
+	}
 
 	if (argc > 2) {
 		if (strcmp(argv[2], "FINITE") == 0) caseType = FINITE;
 		else if (strcmp(argv[2], "NATURAL") == 0) caseType = NATURAL;
 		else if (strcmp(argv[2], "DISCRETE") == 0) caseType = DISCRETE;
+		else if (strcmp(argv[2], "ALL") == 0) caseType = ALL;
 		else {
 			printf("The case \"%s\" is not valid.\n", argv[2]);
 			return 1;
 		}
-		filename = argv[1];
 	}
+
+	std::vector<Case> caseTypes;
+	if (caseType == ALL)
+		caseTypes = { FINITE, NATURAL, DISCRETE };
+	else
+		caseTypes = { caseType };
+
 
 	InputClauses phi = parseFile(filename);
 
@@ -280,15 +306,29 @@ int main(int argc, char **argv) {
 		printFormula(phi, fact, false);
 		printf("\n");
 	}
-	printf("---------------\n");
+	printf("---------------\n\n");
 
-	bool result = check(phi, caseType);
-	printf("result: %s", result ? "SATISFIABLE" : "NON SATISFIABLE");
+	std::vector<std::thread> threads;
+	for (auto caseType : caseTypes) {
+		printf("Starting check of the %s case.\n", caseStrings[caseType]);
+		std::thread th(check, std::ref(phi), caseType);
+		threads.push_back(std::move(th));
+	}
+
+	for (auto &th : threads) {
+		th.join();
+	};
+
+	printf("Done.\n");
+	return 0;
+
+
+
 
 	return 0;
 }
 
-bool check(InputClauses & phi, Case caseType) {
+bool check(InputClauses &phi, Case caseType) {
 	int min, max;
 	switch (caseType) {
 		case FINITE:	min = 2; break;
@@ -320,13 +360,14 @@ bool check(InputClauses & phi, Case caseType) {
 					return true;
 	}
 
+	printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
 	return false;
 }
 
 bool saturate(int d, int x, int y, const State& state) {
 	IntervalMap hi, lo;
 
-	printf("Starting SATURATE size:%d, starting interval: [%d, %d]\n", d, x, y);
+	//printf("Starting SATURATE size:%d, starting interval: [%d, %d]\n", d, x, y);
 
 	for (int z = 0; z < d - 1; z++) {
 		for (int t = z + 1; t < d; t++) {
@@ -410,6 +451,9 @@ bool saturate(int d, int x, int y, const State& state) {
 
 	}
 
+	printf("The formula is SATISFIABLE in the %s case, with size %d and starting interval [%d, %d]:\n", 
+			caseStrings[state.caseType], d, x, y);
+	printState(state.phi, lo);
 	return true;
 }
 
