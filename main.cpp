@@ -7,12 +7,18 @@
 std::mutex stdout_mutex;
 
 int main(int argc, char **argv) {
+	srand(time(NULL));
 
 	auto filename = "test.horn";
 	auto caseType = ALL;
 
+	InputClauses phi;
+
 	if (argc > 1) {
 		filename = argv[1];
+		phi = parseFile(filename);
+	} else {
+		phi = randomInput();
 	}
 
 	if (argc > 2) {
@@ -31,9 +37,6 @@ int main(int argc, char **argv) {
 		caseTypes = { FINITE, NATURAL, DISCRETE };
 	else
 		caseTypes = { caseType };
-
-
-	InputClauses phi = parseFile(filename);
 
 	printf("---- Rules ----\n");
 	for (size_t i = 0; i < phi.rules.size(); i++) {
@@ -74,7 +77,6 @@ bool check(InputClauses &phi, Case caseType) {
 		default:		return false;
 	}
 	max = min + 6 * phi.rules.size(); 
-	// devo considerare solo il numero delle clausole?
 
 	State state = {caseType, phi};
 	FormulaSet literals(phi.facts.begin(), phi.facts.end());
@@ -91,6 +93,9 @@ bool check(InputClauses &phi, Case caseType) {
 
 	for (int k = min; k <= max; k++) {
 		int ymax = k - (caseType != FINITE);
+		stdout_mutex.lock();
+		printf("%s - checking with size: %d\n", caseStrings[caseType], k);
+		stdout_mutex.unlock();
 		for (int x = xmin; x < ymax - 1; x++)
 			for (int y = x + 1; y < ymax; y++)
 				if (saturate(k, x, y, state))
@@ -103,8 +108,6 @@ bool check(InputClauses &phi, Case caseType) {
 
 bool saturate(int d, int x, int y, const State& state) {
 	IntervalMap hi, lo;
-
-	//printf("Starting SATURATE size:%d, starting interval: [%d, %d]\n", d, x, y);
 
 	for (int z = 0; z < d - 1; z++) {
 		for (int t = z + 1; t < d; t++) {
@@ -191,8 +194,7 @@ bool saturate(int d, int x, int y, const State& state) {
 
 	stdout_mutex.lock();
 	printf("The formula is SATISFIABLE in the %s case, with size %d and starting interval [%d, %d]:\n", 
-			caseStrings[state.caseType], d, x, y
-			);
+			caseStrings[state.caseType], d, x, y );
 	printState(state.phi, lo, d);
 	stdout_mutex.unlock();
 	return true;

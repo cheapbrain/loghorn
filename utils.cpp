@@ -6,9 +6,9 @@ void printFormula(const InputClauses& phi, const Formula f, bool universal) {
 	if (f.type == CLAUSE) {
 		Clause c = phi.rules[f.id];
 		for (auto& l : c) {
-			if (l == c.back())       printf("%s", " -> ");
-			else if (l == c.front()) printf("%s", prefix);
-			else                     printf("%s", " & ");
+			if (&l == &c.back())       printf("%s", " -> ");
+			else if (&l == &c.front()) printf("%s", prefix);
+			else                       printf("%s", " & ");
 			printFormula(phi, l, false);
 		}
 		return;
@@ -97,7 +97,7 @@ Formula parseFormula(const std::string& line, TokInfo& token, InputClauses& phi)
 
 	if (text.compare("[A]") == 0) {
 		f.type = BOXA;
-	} else if (text.compare("[B]") == 0) {
+	} else if (text.compare("[P]") == 0) {
 		f.type = BOXA_BAR;
 	} else {
 		f.type = LETTER;
