@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <thread>
 #include <mutex>
+#include <chrono>
 
 enum FormulaType {
 	LETTER,
@@ -97,8 +98,8 @@ void printFormula(const InputClauses& phi, const Formula f, bool universal);
 void printInterval(const InputClauses& phi, const Interval& interval, const FormulaSet& formulas);
 void printState(const InputClauses& phi, const IntervalMap &map, int d);
 
-/* Parse Utilities */
+/* Parse / Generator Utilities */
 InputClauses parseFile(const char* path);
-
+InputClauses randomInput(int n_clauses, int letters, int clause_len);
 
 

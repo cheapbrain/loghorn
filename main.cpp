@@ -5,8 +5,9 @@
 #include "generate.cpp"
 
 std::mutex stdout_mutex;
+bool print_messages = false;
 
-int main(int argc, char **argv) {
+int main2(int argc, char **argv) {
 	srand(time(NULL));
 
 	auto filename = "test.horn";
@@ -18,7 +19,7 @@ int main(int argc, char **argv) {
 		filename = argv[1];
 		phi = parseFile(filename);
 	} else {
-		phi = randomInput();
+		phi = randomInput(5, 2, 3);
 	}
 
 	if (argc > 2) {
@@ -68,6 +69,46 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
+int main(int argc, char **argv) {
+	using namespace std::chrono;
+	srand(time(NULL));
+
+
+	int min_clauses = 1;
+	int max_clauses = 100;
+
+	int min_letters = 1;
+	int max_letters = 10;
+
+	int clause_len = 5;
+	auto case_type = FINITE;
+
+	int num_tests = 10;
+
+	printf("%10s %10s %10s\n", "clauses", "letters", "seconds");
+	for (int num_clauses = min_clauses; num_clauses < max_clauses; num_clauses++) {
+		for (int num_letters = min_letters; num_letters < max_letters; num_letters++) {
+
+			std::vector<InputClauses> inputs;
+			for (int i = 0; i < num_tests; i++) {
+				inputs.push_back(randomInput(num_clauses, num_letters, clause_len));
+			}
+
+			auto t1 = high_resolution_clock::now();
+			for (int i = 0; i < num_tests; i++) {
+				check(inputs[i], case_type);
+			}
+			auto t2 = high_resolution_clock::now();
+			double elapsed_time = (duration_cast<duration<double>>(t2 - t1)).count();
+
+			printf("%10d %10d %10f\n", num_clauses, num_letters, elapsed_time);
+
+		}
+	}
+	
+	return 0;
+}
+
 bool check(InputClauses &phi, Case caseType) {
 	int min, max;
 	switch (caseType) {
@@ -93,16 +134,21 @@ bool check(InputClauses &phi, Case caseType) {
 
 	for (int k = min; k <= max; k++) {
 		int ymax = k - (caseType != FINITE);
-		stdout_mutex.lock();
-		printf("%s - checking with size: %d\n", caseStrings[caseType], k);
-		stdout_mutex.unlock();
+
+		if (print_messages) {
+			stdout_mutex.lock();
+			printf("%s - checking with size: %d\n", caseStrings[caseType], k);
+			stdout_mutex.unlock();
+		}
+
 		for (int x = xmin; x < ymax - 1; x++)
 			for (int y = x + 1; y < ymax; y++)
 				if (saturate(k, x, y, state))
 					return true;
 	}
 
-	printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
+	if (print_messages)
+		printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
 	return false;
 }
 
@@ -192,11 +238,13 @@ bool saturate(int d, int x, int y, const State& state) {
 
 	}
 
-	stdout_mutex.lock();
-	printf("The formula is SATISFIABLE in the %s case, with size %d and starting interval [%d, %d]:\n", 
-			caseStrings[state.caseType], d, x, y );
-	printState(state.phi, lo, d);
-	stdout_mutex.unlock();
+	if (print_messages) {
+		stdout_mutex.lock();
+		printf("The formula is SATISFIABLE in the %s case, with size %d and starting interval [%d, %d]:\n", 
+				caseStrings[state.caseType], d, x, y );
+		printState(state.phi, lo, d);
+		stdout_mutex.unlock();
+	}
 	return true;
 }
 

@@ -23,14 +23,10 @@ int rand(int max) {
 	return rand() % max;
 }
 
-InputClauses randomInput() {
+InputClauses randomInput(int n_clauses, int letters, int clause_len) {
 	InputClauses phi = {};
 	phi.labels.push_back("F");
 	phi.labels.push_back("T");
-
-	int n_clauses = 10;
-	int clause_len = 3;
-	int letters = 2;
 
 	for (int i = 0; i < letters; i++) {
 		std::string label = numToLabel(i);
@@ -57,7 +53,6 @@ InputClauses randomInput() {
 				break;
 			}
 
-				printf("%d %d\n", type, id);
 			c.push_back(Formula::create(type, id));
 		}
 		phi.rules.push_back(c);
