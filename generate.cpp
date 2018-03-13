@@ -23,37 +23,52 @@ int rand(int max) {
 	return rand() % max;
 }
 
-InputClauses randomInput(int n_clauses, int letters, int clause_len) {
+float frand() {
+	return (float)rand() / RAND_MAX;
+}
+
+InputClauses randomInput(int n_clauses, int letters, int clause_len, float falsehood_rate) {
 	InputClauses phi = {};
 	phi.labels.push_back("F");
 	phi.labels.push_back("T");
 
+	std::vector<Formula> symbols;
+	//symbols.push_back(Formula::create(BOXA, 0));
+	//symbols.push_back(Formula::create(BOXA_BAR, 0));
+	
+	if (letters * 3 < clause_len) {
+		printf("The number of letters is too small compared to the clause length\n");
+		return phi;
+	}
+
 	for (int i = 0; i < letters; i++) {
 		std::string label = numToLabel(i);
 		phi.labels.push_back(label);
+
+		symbols.push_back(Formula::create(BOXA_BAR, i+2));
+		symbols.push_back(Formula::create(BOXA, i+2));
+		symbols.push_back(Formula::create(LETTER, i+2));
 	}
 
 	for (int i = 0; i < n_clauses; i++) {
 		std::vector<int> buff;
 		Clause c;
-		bool has_a = false;
-		bool has_abar = false;
-		for (int j = 0; j < clause_len; j++) {
-			FormulaType type;
-			int id;
-			for (;;) {
-				type = (FormulaType) rand(3);
-				id = (rand(letters+1) + 2) % (letters + 2);
 
-				if (id == FALSEHOOD && type == LETTER && j < clause_len -1) continue;
-				if (((has_a && type == BOXA) || (has_abar && type == BOXA_BAR)) && j < clause_len - 1) continue;
-				
-				if (type == BOXA) has_a = true;
-				if (type == BOXA_BAR) has_abar = true;
-				break;
+		std::vector<Formula> availableSymbols = symbols;
+		for (int j = 0; j < clause_len; j++) {
+
+			if ((j == clause_len-1) && frand() < falsehood_rate) {
+				c.push_back(Formula::falsehood());
+
+			} else {
+				int ns = availableSymbols.size();
+				int index = rand(ns);
+				Formula f = availableSymbols[index];
+				availableSymbols[index] = availableSymbols[ns-1];
+				availableSymbols.resize(ns-1);
+				c.push_back(f);
 			}
 
-			c.push_back(Formula::create(type, id));
 		}
 		phi.rules.push_back(c);
 

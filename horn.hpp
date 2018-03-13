@@ -89,7 +89,7 @@ typedef std::unordered_set<Formula, FormulaHash> FormulaSet;
 typedef std::unordered_map<Interval, FormulaSet, IntervalHash> IntervalMap;
 
 /* Satisfiability Checker */
-bool check(InputClauses& phi, Case caseType);
+int check(InputClauses& phi, Case caseType);
 bool saturate(int d, int x, int y, const State& phi);
 int extend(int d, IntervalMap& hi, IntervalMap& lo, const State& phi);
 

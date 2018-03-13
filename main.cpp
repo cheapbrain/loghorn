@@ -8,7 +8,7 @@ std::mutex stdout_mutex;
 bool print_messages = false;
 
 int main2(int argc, char **argv) {
-	srand(time(NULL));
+	srand((unsigned int)time(NULL));
 
 	auto filename = "test.horn";
 	auto caseType = ALL;
@@ -19,7 +19,7 @@ int main2(int argc, char **argv) {
 		filename = argv[1];
 		phi = parseFile(filename);
 	} else {
-		phi = randomInput(5, 2, 3);
+		phi = randomInput(5, 2, 3, 0.5);
 	}
 
 	if (argc > 2) {
@@ -71,8 +71,7 @@ int main2(int argc, char **argv) {
 
 int main(int argc, char **argv) {
 	using namespace std::chrono;
-	srand(time(NULL));
-
+	srand((unsigned int)time(NULL));
 
 	int min_clauses = 1;
 	int max_clauses = 100;
@@ -80,28 +79,63 @@ int main(int argc, char **argv) {
 	int min_letters = 1;
 	int max_letters = 10;
 
-	int clause_len = 5;
+	int clause_len = 3;
 	auto case_type = FINITE;
+
+	float falsehood_rate = 0.5;
 
 	int num_tests = 10;
 
-	printf("%10s %10s %10s\n", "clauses", "letters", "seconds");
+
+	print_messages = true;
+	InputClauses input = randomInput(10, 2, 3, 0.5);
+	
+	printf("---- Rules ----\n");
+	for (size_t i = 0; i < input.rules.size(); i++) {
+		printFormula(input, Formula::create(CLAUSE, i), true);
+		printf("\n");
+	}
+
+	printf("---- Facts ----\n");
+	for (auto fact : input.facts) {
+		printFormula(input, fact, false);
+		printf("\n");
+	}
+	printf("---------------\n\n");
+
+	int asdf = check(input, case_type);
+	printf("%d\n", asdf);
+	return 0;
+
+	printf("%s\t%s\t%s\t%s\n", "clauses", "letters", "seconds", "size");
 	for (int num_clauses = min_clauses; num_clauses < max_clauses; num_clauses++) {
 		for (int num_letters = min_letters; num_letters < max_letters; num_letters++) {
 
+			float tsize = 0;
+			double ttime = 0;
+			int ntests = 0;
+
 			std::vector<InputClauses> inputs;
 			for (int i = 0; i < num_tests; i++) {
-				inputs.push_back(randomInput(num_clauses, num_letters, clause_len));
+				InputClauses phi = randomInput(num_clauses, num_letters, clause_len, falsehood_rate);
+
+				auto t1 = high_resolution_clock::now();
+
+				int size = check(phi, case_type);
+
+				auto t2 = high_resolution_clock::now();
+
+				if (size == 0) continue;
+
+				tsize += size;
+				ttime += (duration_cast<duration<double>>(t2 - t1)).count();
+				ntests++;
 			}
 
-			auto t1 = high_resolution_clock::now();
-			for (int i = 0; i < num_tests; i++) {
-				check(inputs[i], case_type);
-			}
-			auto t2 = high_resolution_clock::now();
-			double elapsed_time = (duration_cast<duration<double>>(t2 - t1)).count();
+			tsize /= ntests;
+			ttime /= ntests;
 
-			printf("%10d %10d %10f\n", num_clauses, num_letters, elapsed_time);
+			printf("%d\t%d\t%.10f\t%.3f\n", num_clauses, num_letters, ttime, tsize);
 
 		}
 	}
@@ -109,7 +143,7 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-bool check(InputClauses &phi, Case caseType) {
+int check(InputClauses &phi, Case caseType) {
 	int min, max;
 	switch (caseType) {
 		case FINITE:	min = 2; break;
@@ -144,12 +178,12 @@ bool check(InputClauses &phi, Case caseType) {
 		for (int x = xmin; x < ymax - 1; x++)
 			for (int y = x + 1; y < ymax; y++)
 				if (saturate(k, x, y, state))
-					return true;
+					return k;
 	}
 
 	if (print_messages)
 		printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
-	return false;
+	return 0;
 }
 
 bool saturate(int d, int x, int y, const State& state) {
