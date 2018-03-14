@@ -1,7 +1,7 @@
 
 p
 
-[U] p -> [B]F
+[U] p -> [P]F
 [U] p & [A]F -> F
 [U] p -> [A]q
 [U] q -> [A]F

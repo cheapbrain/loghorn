@@ -86,17 +86,45 @@ struct FormulaHash {
 };
 
 typedef std::unordered_set<Formula, FormulaHash> FormulaSet;
-typedef std::unordered_map<Interval, FormulaSet, IntervalHash> IntervalMap;
+typedef std::vector<Formula> FormulaVector;
+inline void eraseFast(FormulaVector& v, int i) {
+	int last = v.size() - 1;
+	if (i > last) return;
+	v[i] = v[last];
+	v.pop_back();
+}
+
+template<typename T> struct IntervalVector {
+	private:
+		int n;
+		std::vector<T> v;
+		int getIndex(int x, int y) {
+			x = (n - x) - 2;
+			y = (n - y) - 1;
+			return (x * (x + 1) / 2) + y;
+		}
+
+	public:
+		IntervalVector(int size) : v(size * (size + 1) /2) {
+			n = size;
+		}
+		T& get(int x, int y) {
+			return v[getIndex(x, y)];
+		}
+};
+
 
 /* Satisfiability Checker */
 int check(InputClauses& phi, Case caseType);
 bool saturate(int d, int x, int y, const State& phi);
-int extend(int d, IntervalMap& hi, IntervalMap& lo, const State& phi);
+int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>& lo, const State& phi);
 
 /* Print Utilities */
 void printFormula(const InputClauses& phi, const Formula f, bool universal);
 void printInterval(const InputClauses& phi, const Interval& interval, const FormulaSet& formulas);
-void printState(const InputClauses& phi, const IntervalMap &map, int d);
+void printInterval(const InputClauses& phi, const Interval& interval, const FormulaVector& formulas);
+void printState(const InputClauses& phi, IntervalVector<FormulaSet> &intervals, int d);
+void printState(const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d);
 
 /* Parse / Generator Utilities */
 InputClauses parseFile(const char* path);

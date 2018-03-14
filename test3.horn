@@ -2,6 +2,6 @@
 p
 
 [U] p -> [A]p
-[U] p -> [B]p
+[U] p -> [P]p
 [U] p & [A]F -> F
-[U] p & [B]F -> F
+[U] p & [P]F -> F

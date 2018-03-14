@@ -32,11 +32,31 @@ void printInterval(const InputClauses& phi, const Interval& interval, const Form
 	printf("\n");
 }
 
-void printState(const InputClauses& phi, const IntervalMap &map, int d) {
+void printInterval(const InputClauses& phi, const Interval& interval, const FormulaVector& formulas) {
+	if (formulas.size() == 0) return;
+	printf("[%d, %d]: ",interval.first, interval.second);
+	for(auto f: formulas) {
+		printf("\n\t");
+		printFormula(phi, f, false);
+	}
+	printf("\n");
+}
+
+void printState(const InputClauses& phi, IntervalVector<FormulaSet> &intervals, int d) {
 	for (int z = 0; z < d - 1; z++) {
 		for (int t = z + 1; t < d; t++) {
-			auto i = map.find(std::make_pair(z, t));
-			printInterval(phi, i->first, i->second);
+			auto i = intervals.get(z, t);
+			printInterval(phi, {z, t}, i);
+		}
+	}
+	printf("\n");
+}
+
+void printState(const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d) {
+	for (int z = 0; z < d - 1; z++) {
+		for (int t = z + 1; t < d; t++) {
+			auto i = intervals.get(z, t);
+			printInterval(phi, {z, t}, i);
 		}
 	}
 	printf("\n");

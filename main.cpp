@@ -7,19 +7,20 @@
 std::mutex stdout_mutex;
 bool print_messages = false;
 
-int main2(int argc, char **argv) {
+int amain(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
 	auto filename = "test.horn";
-	auto caseType = ALL;
+	auto caseType = DISCRETE;
 
 	InputClauses phi;
+	print_messages = true;
 
 	if (argc > 1) {
 		filename = argv[1];
 		phi = parseFile(filename);
 	} else {
-		phi = randomInput(5, 2, 3, 0.5);
+		phi = randomInput(10, 2, 3, 0.5);
 	}
 
 	if (argc > 2) {
@@ -73,39 +74,18 @@ int main(int argc, char **argv) {
 	using namespace std::chrono;
 	srand((unsigned int)time(NULL));
 
-	int min_clauses = 1;
+	int min_clauses = 2;
 	int max_clauses = 100;
 
-	int min_letters = 1;
-	int max_letters = 10;
+	int min_letters = 2;
+	int max_letters = 20;
 
 	int clause_len = 3;
-	auto case_type = FINITE;
+	auto case_type = DISCRETE;
 
-	float falsehood_rate = 0.5;
+	float falsehood_rate = 1.0;
 
 	int num_tests = 10;
-
-
-	print_messages = true;
-	InputClauses input = randomInput(10, 2, 3, 0.5);
-	
-	printf("---- Rules ----\n");
-	for (size_t i = 0; i < input.rules.size(); i++) {
-		printFormula(input, Formula::create(CLAUSE, i), true);
-		printf("\n");
-	}
-
-	printf("---- Facts ----\n");
-	for (auto fact : input.facts) {
-		printFormula(input, fact, false);
-		printf("\n");
-	}
-	printf("---------------\n\n");
-
-	int asdf = check(input, case_type);
-	printf("%d\n", asdf);
-	return 0;
 
 	printf("%s\t%s\t%s\t%s\n", "clauses", "letters", "seconds", "size");
 	for (int num_clauses = min_clauses; num_clauses < max_clauses; num_clauses++) {
@@ -124,8 +104,6 @@ int main(int argc, char **argv) {
 				int size = check(phi, case_type);
 
 				auto t2 = high_resolution_clock::now();
-
-				if (size == 0) continue;
 
 				tsize += size;
 				ttime += (duration_cast<duration<double>>(t2 - t1)).count();
@@ -183,26 +161,29 @@ int check(InputClauses &phi, Case caseType) {
 
 	if (print_messages)
 		printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
-	return 0;
+	return max;
 }
 
 bool saturate(int d, int x, int y, const State& state) {
-	IntervalMap hi, lo;
+	IntervalVector<FormulaVector> hi(d);
+	IntervalVector<FormulaSet> lo(d);
 
 	for (int z = 0; z < d - 1; z++) {
 		for (int t = z + 1; t < d; t++) {
-			auto zt = std::make_pair(z, t);
-			hi[zt] = FormulaSet();
-			lo[zt] = FormulaSet{ Formula::truth() };
 
-			for (auto i = 0U; i < state.phi.rules.size(); i++)
-				hi[zt].insert(Formula::create(CLAUSE, i));
+			lo.get(z, t).insert(Formula::truth());
+
+			auto& hizt = hi.get(z, t);
+			for (auto i = 0U; i < state.phi.rules.size(); i++) {
+				hizt.push_back(Formula::create(CLAUSE, i));
+			}
+
 		}
 	}
 
-	auto xy = std::make_pair(x, y);
+	auto& hixy = hi.get(x, y);
 	for (auto f : state.phi.facts) {
-		hi[xy].insert(f);
+		hixy.push_back(f);
 	}
 
 	bool changed = true;
@@ -211,65 +192,70 @@ bool saturate(int d, int x, int y, const State& state) {
 
 		for (int z = 0; z < d -1; z++) {
 			for (int t = z + 1; t < d; t++) {
-				auto zt = std::make_pair(z, t);
+				auto& hizt = hi.get(z, t);
 
-				std::vector<Formula> formulas (hi[zt].begin(), hi[zt].end());
-				for (auto f : formulas) {
+				for (int ii = hizt.size()-1; ii >= 0; ii--) {
+					auto f = hizt[ii];
 
 					if (f.type == LETTER && f.id == TRUTH) {
-						hi[zt].erase(f);
+						eraseFast(hizt, ii);
 
 					} else if (f.type == LETTER && f.id == FALSEHOOD) {
-						lo[zt].insert(f);
+						lo.get(z, t).insert(f);
 						return false;
 
 					} else if (f.type == LETTER) {
-						hi[zt].erase(f);
-						if (lo[zt].insert(f).second) changed = true;
+						eraseFast(hizt, ii);
+						if (lo.get(z, t).insert(f).second) changed = true;
 
 					} else if (f.type == BOXA) {
-						hi[zt].erase(f);
-						if (lo[zt].insert(f).second) changed = true;
-						for (int r = t + 1; r < d; r++)
-							if (hi[std::make_pair(t, r)].insert(Formula::create(LETTER, f.id)).second) changed = true;
+						eraseFast(hizt, ii);
+						if (lo.get(z, t).insert(f).second) changed = true;
+						for (int r = t + 1; r < d; r++) {
+							if (lo.get(t, r).insert(Formula::create(LETTER, f.id)).second) changed = true;
+							if (f.id == FALSEHOOD) return false;
+						}
 
 					} else if (f.type == BOXA_BAR) {
-						hi[zt].erase(f);
-						if (lo[zt].insert(f).second) changed = true;
-						for (int r = 0; r < z; r++)
-							if (hi[std::make_pair(r, z)].insert(Formula::create(LETTER, f.id)).second) changed = true;
+						eraseFast(hizt, ii);
+						if (lo.get(z, t).insert(f).second) changed = true;
+						for (int r = 0; r < z; r++) {
+							if (lo.get(r, z).insert(Formula::create(LETTER, f.id)).second) changed = true;
+							if (f.id == FALSEHOOD) return false;
+						}
 
 					} else if (f.type == CLAUSE) {
 						Clause& clause = state.phi.rules[f.id];
 						Formula last = clause.back();
 						bool found = true;
+						auto& lozt = lo.get(z, t);
 						for (auto it = clause.begin(); it != clause.end()-1; it++) {
 							auto l = *it;
-							if (lo[zt].find(l) == lo[zt].end()) {
+							if (lozt.find(l) == lozt.end()) {
 								found = false;
 								break;
 							}
 						}
 
 						if (found) {
-							hi[zt].erase(f);
-							//lo[zt].insert(f);
-							if (hi[zt].insert(last).second) changed = true;
+							eraseFast(hizt, ii);
+							lozt.insert(f);
+							hizt.push_back(last); 
+							changed = true;
 						}
 					}
 
 				}
 
-				int res = extend(d, hi, lo, state);
-				changed = changed || (res == 1);
-
-				if (res == 2) {
-					return false;
-				}
-
 			}
 		}
 
+		int res = extend(d, hi, lo, state);
+		changed = changed || (res == 1);
+
+		if (res == 2) {
+			return false;
+		}
 	}
 
 	if (print_messages) {
@@ -282,9 +268,12 @@ bool saturate(int d, int x, int y, const State& state) {
 	return true;
 }
 
-int extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
+int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>& lo, const State& state) {
 	int changed = false;
 	int min, max;
+
+	//printState(state.phi, lo, d);
+	//printState(state.phi, hi, d);
 
 	if (state.caseType == FINITE) {
 		min = 0;
@@ -294,55 +283,77 @@ int extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
 		max = d - 2;
 
 		for (int z = min; z < max; z++) {
-			for (auto f : hi[std::make_pair(z, max)]) {
-				if (hi[std::make_pair(z, max+1)].insert(f).second) changed = 1;
+			auto& hizm1 = hi.get(z, max+1);
+			for (auto f : hi.get(z, max)) {
+				if (f.type != CLAUSE) {
+					hizm1.push_back(f);
+					changed = 1;
+				}
 			}
-			for (auto f : lo[std::make_pair(z, max)]) {
-				if (lo[std::make_pair(z, max+1)].insert(f).second) changed = 1;
+			auto& lozm1 = lo.get(z, max+1);
+			for (auto f : lo.get(z, max)) {
+				if (f.type != CLAUSE) {
+					if (lozm1.insert(f).second) changed = 1;
+				}
 			}
 		}
 
-		Interval last = std::make_pair(max, max+1);
-		for (auto f : lo[last]) {
+		std::vector<Formula> temp;
+		auto& last = lo.get(max, max+1);
+		for (auto f : last) {
 			if (f.type == LETTER) {
-				if (lo[last].insert(Formula::create(BOXA, f.id)).second) changed = 1;
+				temp.push_back(Formula::create(BOXA, f.id));
 			} 
 			else if (f.type == BOXA) {
 				if (f.id == FALSEHOOD) return 2;
-				if (lo[last].insert(Formula::create(LETTER, f.id)).second) changed = 1;
+				temp.push_back(Formula::create(LETTER, f.id));
 			} 
 			else if (f.type == BOXA_BAR) {
 				if (f.id == FALSEHOOD) return 2;
-				if (lo[last].insert(Formula::create(LETTER, f.id)).second) changed = 1;
+				temp.push_back(Formula::create(LETTER, f.id));
 			}
 		}
+		for (auto f: temp) {
+			if (last.insert(f).second) changed = 1;
+		}
+		temp.clear();
 
 		if (state.caseType == DISCRETE) {
 			min = 1;
 			max = d - 1;
 
 			for (int z = min + 1; z <= max; z++) {
-				for (auto f : hi[std::make_pair(1, z)]) {
-					if (hi[std::make_pair(0, z)].insert(f).second) changed = 1;
+				auto& hi0z = hi.get(0, z);
+				for (auto f : hi.get(1, z)) {
+					if (f.type != CLAUSE) {
+						hi0z.push_back(f);
+						changed = 1;
+					}
 				}
-				for (auto f : lo[std::make_pair(1, z)]) {
-					if (lo[std::make_pair(0, z)].insert(f).second) changed = 1;
+				auto& lo0z = lo.get(0, z);
+				for (auto f : lo.get(1, z)) {
+					if (f.type != CLAUSE) {
+						if (lo0z.insert(f).second) changed = 1;
+					}
 				}
 			}
 
-			Interval first = std::make_pair(0, 1);
-			for (auto f : lo[first]) {
+			auto& first = lo.get(0, 1);
+			for (auto f : first) {
 				if (f.type == LETTER) {
-					if (lo[first].insert(Formula::create(BOXA_BAR, f.id)).second) changed = 1;
+					temp.push_back(Formula::create(BOXA_BAR, f.id));
 				}
 				else if (f.type == BOXA) {
 					if (f.id == FALSEHOOD) return 2;
-					if (lo[first].insert(Formula::create(LETTER, f.id)).second) changed = 1;
+					temp.push_back(Formula::create(LETTER, f.id));
 				}
 				else if (f.type == BOXA_BAR) {
 					if (f.id == FALSEHOOD) return 2;
-					if (lo[first].insert(Formula::create(LETTER, f.id)).second) changed = 1;
+					temp.push_back(Formula::create(LETTER, f.id));
 				}
+			}
+			for (auto f: temp) {
+				if (first.insert(f).second) changed = 1;
 			}
 		}
 	}
@@ -353,14 +364,14 @@ int extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
 			bool found = 1;
 			for (int t = z + 1; t < d; t++) {
 				auto p = Formula::create(LETTER, f.id);
-				if (lo[std::make_pair(z, t)].count(p) == 0) {
+				if (lo.get(z, t).count(p) == 0) {
 					found = false;
 					break;
 				}
 			}
 			if (found) {
 				for (int r = 0; r < z; r++)
-					if (lo[std::make_pair(r, z)].insert(f).second) changed = 1;
+					if (lo.get(r, z).insert(f).second) changed = 1;
 			}
 		}
 
@@ -368,14 +379,14 @@ int extend(int d, IntervalMap& hi, IntervalMap& lo, const State& state) {
 			bool found = 1;
 			for (int r = 0; r < z; r++) {
 				auto p = Formula::create(LETTER, f.id);
-				if (lo[std::make_pair(r, z)].count(p) == 0) {
+				if (lo.get(r, z).count(p) == 0) {
 					found = false;
 					break;
 				}
 			}
 			if (found) {
 				for (int t = z + 1; t < d; t++)
-					if (lo[std::make_pair(z, t)].insert(f).second) changed = 1;
+					if (lo.get(z, t).insert(f).second) changed = 1;
 			}
 		}
 

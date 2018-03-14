@@ -74,7 +74,15 @@ InputClauses randomInput(int n_clauses, int letters, int clause_len, float false
 
 	}
 
-	phi.facts.push_back(Formula::create(LETTER, 2));
+	std::vector<Formula> availableSymbols = symbols;
+	for (int i = 0; i < clause_len - 1; i++) {
+		int ns = availableSymbols.size();
+		int index = rand(ns);
+		Formula f = availableSymbols[index];
+		availableSymbols[index] = availableSymbols[ns - 1];
+		availableSymbols.resize(ns - 1);
+		phi.facts.push_back(f);
+	}
 
 	return phi;
 }
