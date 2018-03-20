@@ -7,6 +7,28 @@
 std::mutex stdout_mutex;
 bool print_messages = false;
 
+void print(InputClauses &phi) {
+	printf("---- Rules ----\n");
+	for (size_t i = 0; i < phi.rules.size(); i++) {
+		printFormula(phi, Formula::create(CLAUSE, i), true);
+		printf("\n");
+	}
+
+	printf("---- Facts ----\n");
+	for (auto fact : phi.facts) {
+		printFormula(phi, fact, false);
+		printf("\n");
+	}
+	printf("---------------\n\n");
+}
+
+
+int main(int argc, char **argv) {
+	srand((unsigned int)time(NULL));
+
+	
+}
+
 int amain(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
@@ -40,18 +62,7 @@ int amain(int argc, char **argv) {
 	else
 		caseTypes = { caseType };
 
-	printf("---- Rules ----\n");
-	for (size_t i = 0; i < phi.rules.size(); i++) {
-		printFormula(phi, Formula::create(CLAUSE, i), true);
-		printf("\n");
-	}
-
-	printf("---- Facts ----\n");
-	for (auto fact : phi.facts) {
-		printFormula(phi, fact, false);
-		printf("\n");
-	}
-	printf("---------------\n\n");
+	print(phi);
 
 	std::vector<std::thread> threads;
 	for (auto caseType : caseTypes) {
@@ -70,7 +81,7 @@ int amain(int argc, char **argv) {
 	return 0;
 }
 
-int main(int argc, char **argv) {
+int bmain(int argc, char **argv) {
 	using namespace std::chrono;
 	srand((unsigned int)time(NULL));
 
