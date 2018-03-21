@@ -127,6 +127,7 @@ void printState(const InputClauses& phi, IntervalVector<FormulaSet> &intervals, 
 void printState(const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d);
 
 /* Parse / Generator Utilities */
+std::string numToLabel(int n);
 InputClauses parseFile(const char* path);
 InputClauses randomInput(int n_clauses, int letters, int clause_len);
 

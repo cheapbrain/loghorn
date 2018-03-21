@@ -22,11 +22,65 @@ void print(InputClauses &phi) {
 	printf("---------------\n\n");
 }
 
+void allPossibleClauses(FormulaVector &symbols, Clause &clause, int start, std::vector<Clause> &clauses) {
+	printf("%d ", start);
+
+	if (clause.size() > 0) {
+		Clause falseClause(clause);
+		falseClause.push_back(Formula::falsehood());
+		clauses.push_back(falseClause);
+
+		for (auto f : symbols) {
+			if (std::find(clause.begin(), clause.end(), f) != clause.end()) continue;
+
+			Clause finalClause(clause);
+			finalClause.push_back(f);
+			clauses.push_back(finalClause);
+		}
+	}
+
+	for (int i = start; i < symbols.size(); i++) {
+		clause.push_back(symbols[i]);
+		allPossibleClauses(symbols, clause, i+1, clauses);
+		clause.pop_back();
+	}
+}
 
 int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
+	int num_letters = 2;
+
+	std::vector<std::string> labels;
+	FormulaVector symbols;
+
+	labels.push_back("F");
+	labels.push_back("T");
+
+	for (int i = 0; i < num_letters; i++) {
+		std::string label = numToLabel(i);
+		labels.push_back(label);
+
+		symbols.push_back(Formula::create(LETTER, i+2));
+		symbols.push_back(Formula::create(BOXA, i+2));
+		symbols.push_back(Formula::create(BOXA_BAR, i+2));
+	}
+
+	for (int i = 0; i < symbols.size(); i++)
+		printf("%d %d\n", symbols[i].id, symbols[i].type);
+	printf("\n");
+
+	std::vector<Clause> clauses;
+	Clause empty = {};
 	
+	allPossibleClauses(symbols, empty, 0, clauses);
+
+	InputClauses phi;
+	phi.labels = labels;
+	phi.rules = clauses;
+	phi.facts = {};
+
+	print(phi);
 }
 
 int amain(int argc, char **argv) {
