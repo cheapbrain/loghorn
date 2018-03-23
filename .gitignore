@@ -1,6 +1,8 @@
 
 .vscode
 .vs
+*.psess
+*.vspx
 *.ilk
 *.pdb
 *.obj

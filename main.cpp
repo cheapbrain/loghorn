@@ -23,13 +23,8 @@ void print(InputClauses &phi) {
 }
 
 void allPossibleClauses(FormulaVector &symbols, Clause &clause, int start, std::vector<Clause> &clauses) {
-	printf("%d ", start);
 
 	if (clause.size() > 0) {
-		Clause falseClause(clause);
-		falseClause.push_back(Formula::falsehood());
-		clauses.push_back(falseClause);
-
 		for (auto f : symbols) {
 			if (std::find(clause.begin(), clause.end(), f) != clause.end()) continue;
 
@@ -37,19 +32,96 @@ void allPossibleClauses(FormulaVector &symbols, Clause &clause, int start, std::
 			finalClause.push_back(f);
 			clauses.push_back(finalClause);
 		}
+
+		Clause falseClause(clause);
+		falseClause.push_back(Formula::falsehood());
+		clauses.push_back(falseClause);
 	}
 
-	for (int i = start; i < symbols.size(); i++) {
+	for (size_t i = start; i < symbols.size(); i++) {
 		clause.push_back(symbols[i]);
 		allPossibleClauses(symbols, clause, i+1, clauses);
 		clause.pop_back();
 	}
 }
 
+void allPossibleInputs(std::vector<Clause> &clauses, int start, InputClauses &phi, std::vector<InputClauses> &inputs) {
+	for (size_t i = start; i < clauses.size(); i++) {
+		phi.rules.push_back(clauses[i]);
+		inputs.push_back(phi);
+		allPossibleInputs(clauses, i+1, phi, inputs);
+		phi.rules.pop_back();
+	}
+}
+
+bool skipInput(std::vector<Clause> &clauses, InputClauses &phi) {
+	if (phi.rules.size() == 0) {
+		return false;
+	}
+
+	auto last = phi.rules.back();
+	auto pos = find(clauses.begin(), clauses.end(), last) - clauses.begin() + 1;
+	phi.rules.pop_back();
+	if (pos >= clauses.size()) {
+		return skipInput(clauses, phi);
+	} else {
+		phi.rules.push_back(clauses[pos]);
+		return true;
+	}
+}
+
+bool nextInput(std::vector<Clause> &clauses, InputClauses &phi) {
+	if (phi.rules.size() == 0) {
+		phi.rules.push_back(clauses[0]);
+		return true;
+	}
+
+	auto last = phi.rules.back();
+	auto pos = find(clauses.begin(), clauses.end(), last) - clauses.begin() + 1;
+	if (pos >= clauses.size()) {
+		return skipInput(clauses, phi);
+	} else {
+		phi.rules.push_back(clauses[pos]);
+		return true;
+	}
+}
+
+std::vector<int> setUnion(std::vector<int> &a, std::vector<int> &b) {
+	std::vector<int> c;
+	c.reserve(a.size() + b.size());
+
+	auto first1 = a.begin();
+	auto last1 = a.end();
+	auto first2 = b.begin();
+	auto last2 = b.end();
+
+	while (true) {
+		if (first1 == last1) { c.insert(c.end(), first2, last2); break; }
+		if (first2 == last2) { c.insert(c.end(), first1, last1); break; }
+
+		if (*first1 < *first2) { c.push_back(*first1); ++first1; }
+		else if (*first1 > *first2) { c.push_back(*first2); ++first2; }
+		else { c.push_back(*first1); ++first1; ++first2; }
+	}
+
+	return c;
+}
+
+void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> &out, std::vector<int> &temp, int start, int depth, int size) {
+	for (int i = start; i < old.size() - depth; i++) {
+		auto newSet = setUnion(old[i], temp);
+		if (depth > 0) {
+			buildSet(old, out, newSet, i+1, depth-1, size);
+		} else {
+			out.push_back(newSet);
+		}
+	}
+}
+
 int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
-	int num_letters = 2;
+	int num_letters = 1;
 
 	std::vector<std::string> labels;
 	FormulaVector symbols;
@@ -66,21 +138,30 @@ int main(int argc, char **argv) {
 		symbols.push_back(Formula::create(BOXA_BAR, i+2));
 	}
 
-	for (int i = 0; i < symbols.size(); i++)
+	for (size_t i = 0; i < symbols.size(); i++)
 		printf("%d %d\n", symbols[i].id, symbols[i].type);
 	printf("\n");
 
 	std::vector<Clause> clauses;
 	Clause empty = {};
+	InputClauses phi;
+	phi.labels = labels;
+	phi.facts.push_back(Formula::create(LETTER, 2));
 	
 	allPossibleClauses(symbols, empty, 0, clauses);
 
-	InputClauses phi;
-	phi.labels = labels;
-	phi.rules = clauses;
-	phi.facts = {};
-
-	print(phi);
+	bool hasNext = nextInput(clauses, phi);
+	int done = 0;
+	while (hasNext) {
+		Model model = check(phi, FINITE);
+		printf("%5d %5d %s\n", done, phi.rules.size(), model.satisfied ? "YES" : "NO");
+		done++;
+		if (model.satisfied) {
+			hasNext = nextInput(clauses, phi);
+		} else {
+			hasNext = skipInput(clauses, phi);
+		}
+	}
 }
 
 int amain(int argc, char **argv) {
@@ -166,11 +247,11 @@ int bmain(int argc, char **argv) {
 
 				auto t1 = high_resolution_clock::now();
 
-				int size = check(phi, case_type);
+				Model solution = check(phi, case_type);
 
 				auto t2 = high_resolution_clock::now();
 
-				tsize += size;
+				tsize += solution.lo.size();
 				ttime += (duration_cast<duration<double>>(t2 - t1)).count();
 				ntests++;
 			}
@@ -186,13 +267,13 @@ int bmain(int argc, char **argv) {
 	return 0;
 }
 
-int check(InputClauses &phi, Case caseType) {
+Model check(InputClauses &phi, Case caseType) {
 	int min, max;
 	switch (caseType) {
 		case FINITE:	min = 2; break;
 		case NATURAL:	min = 3; break;
 		case DISCRETE:	min = 4; break;
-		default:		return false;
+		default:		return Model::unsatisfied();
 	}
 	max = min + 6 * phi.rules.size(); 
 
@@ -219,17 +300,19 @@ int check(InputClauses &phi, Case caseType) {
 		}
 
 		for (int x = xmin; x < ymax - 1; x++)
-			for (int y = x + 1; y < ymax; y++)
-				if (saturate(k, x, y, state))
-					return k;
+			for (int y = x + 1; y < ymax; y++) {
+				Model solution = saturate(k, x, y, state);
+				if (solution.satisfied)
+					return solution;
+			}
 	}
 
 	if (print_messages)
 		printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
-	return max;
+	return Model::unsatisfied();
 }
 
-bool saturate(int d, int x, int y, const State& state) {
+Model saturate(int d, int x, int y, const State& state) {
 	IntervalVector<FormulaVector> hi(d);
 	IntervalVector<FormulaSet> lo(d);
 
@@ -267,7 +350,7 @@ bool saturate(int d, int x, int y, const State& state) {
 
 					} else if (f.type == LETTER && f.id == FALSEHOOD) {
 						lo.get(z, t).insert(f);
-						return false;
+						return Model::unsatisfied();
 
 					} else if (f.type == LETTER) {
 						eraseFast(hizt, ii);
@@ -278,7 +361,7 @@ bool saturate(int d, int x, int y, const State& state) {
 						if (lo.get(z, t).insert(f).second) changed = true;
 						for (int r = t + 1; r < d; r++) {
 							if (lo.get(t, r).insert(Formula::create(LETTER, f.id)).second) changed = true;
-							if (f.id == FALSEHOOD) return false;
+							if (f.id == FALSEHOOD) return Model::unsatisfied();
 						}
 
 					} else if (f.type == BOXA_BAR) {
@@ -286,7 +369,7 @@ bool saturate(int d, int x, int y, const State& state) {
 						if (lo.get(z, t).insert(f).second) changed = true;
 						for (int r = 0; r < z; r++) {
 							if (lo.get(r, z).insert(Formula::create(LETTER, f.id)).second) changed = true;
-							if (f.id == FALSEHOOD) return false;
+							if (f.id == FALSEHOOD) return Model::unsatisfied();
 						}
 
 					} else if (f.type == CLAUSE) {
@@ -319,7 +402,7 @@ bool saturate(int d, int x, int y, const State& state) {
 		changed = changed || (res == 1);
 
 		if (res == 2) {
-			return false;
+			return Model::unsatisfied();
 		}
 	}
 
@@ -330,7 +413,7 @@ bool saturate(int d, int x, int y, const State& state) {
 		printState(state.phi, lo, d);
 		stdout_mutex.unlock();
 	}
-	return true;
+	return Model(lo, true, Interval(x, y));
 }
 
 int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>& lo, const State& state) {

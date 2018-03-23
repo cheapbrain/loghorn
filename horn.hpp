@@ -105,18 +105,28 @@ template<typename T> struct IntervalVector {
 		}
 
 	public:
-		IntervalVector(int size) : v(size * (size + 1) /2) {
-			n = size;
-		}
+		IntervalVector() : n(0), v() {}
+		IntervalVector(int size) : n(size), v(size * (size + 1) /2) {}
 		T& get(int x, int y) {
 			return v[getIndex(x, y)];
 		}
+		int size() {
+			return n;
+		}
 };
 
+struct Model {
+	Model(IntervalVector<FormulaSet> lo, bool satisfied, Interval start)
+		: lo(lo), satisfied(satisfied), start(start) {}
+	static Model unsatisfied() { return Model({}, false, {}); }
+	IntervalVector<FormulaSet> lo;
+	bool satisfied = false;
+	Interval start;
+};
 
 /* Satisfiability Checker */
-int check(InputClauses& phi, Case caseType);
-bool saturate(int d, int x, int y, const State& phi);
+Model check(InputClauses& phi, Case caseType);
+Model saturate(int d, int x, int y, const State& phi);
 int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>& lo, const State& phi);
 
 /* Print Utilities */
