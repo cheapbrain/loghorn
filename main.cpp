@@ -22,6 +22,21 @@ void print(InputClauses &phi) {
 	printf("---------------\n\n");
 }
 
+void print(std::vector<int> v) {
+	printf("{ ");
+	for (auto i : v) {
+		printf("%d ", i);
+	}
+	printf("} ");
+}
+
+void print(std::vector<std::vector<int>> v) {
+	for (auto c : v) {
+		print(c);
+		printf("\n");
+	}
+}
+
 void allPossibleClauses(FormulaVector &symbols, Clause &clause, int start, std::vector<Clause> &clauses) {
 
 	if (clause.size() > 0) {
@@ -62,7 +77,7 @@ bool skipInput(std::vector<Clause> &clauses, InputClauses &phi) {
 	auto last = phi.rules.back();
 	auto pos = find(clauses.begin(), clauses.end(), last) - clauses.begin() + 1;
 	phi.rules.pop_back();
-	if (pos >= clauses.size()) {
+	if (pos >= (int)clauses.size()) {
 		return skipInput(clauses, phi);
 	} else {
 		phi.rules.push_back(clauses[pos]);
@@ -78,7 +93,7 @@ bool nextInput(std::vector<Clause> &clauses, InputClauses &phi) {
 
 	auto last = phi.rules.back();
 	auto pos = find(clauses.begin(), clauses.end(), last) - clauses.begin() + 1;
-	if (pos >= clauses.size()) {
+	if (pos >= (int)clauses.size()) {
 		return skipInput(clauses, phi);
 	} else {
 		phi.rules.push_back(clauses[pos]);
@@ -87,6 +102,9 @@ bool nextInput(std::vector<Clause> &clauses, InputClauses &phi) {
 }
 
 std::vector<int> setUnion(std::vector<int> &a, std::vector<int> &b) {
+	if (a.size() == 0) return b;
+	if (b.size() == 0) return a;
+
 	std::vector<int> c;
 	c.reserve(a.size() + b.size());
 
@@ -104,15 +122,20 @@ std::vector<int> setUnion(std::vector<int> &a, std::vector<int> &b) {
 		else { c.push_back(*first1); ++first1; ++first2; }
 	}
 
+
 	return c;
 }
 
-void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> &out, std::vector<int> &temp, int start, int depth, int size) {
-	for (int i = start; i < old.size() - depth; i++) {
+void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> &out, std::vector<int> &temp, int start, int depth, unsigned int size) {
+	auto tempsize = temp.size();
+	for (unsigned int i = start; i < old.size() - depth; i++) {
 		auto newSet = setUnion(old[i], temp);
+
 		if (depth > 0) {
-			buildSet(old, out, newSet, i+1, depth-1, size);
-		} else {
+			if (tempsize == 0 || newSet.size() <= tempsize+1) {
+				buildSet(old, out, newSet, i + 1, depth - 1, size);
+			}
+		} else if (newSet.size() == size+1) {
 			out.push_back(newSet);
 		}
 	}
@@ -121,7 +144,7 @@ void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> 
 int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
-	int num_letters = 1;
+	int num_letters = 3;
 
 	std::vector<std::string> labels;
 	FormulaVector symbols;
@@ -138,10 +161,6 @@ int main(int argc, char **argv) {
 		symbols.push_back(Formula::create(BOXA_BAR, i+2));
 	}
 
-	for (size_t i = 0; i < symbols.size(); i++)
-		printf("%d %d\n", symbols[i].id, symbols[i].type);
-	printf("\n");
-
 	std::vector<Clause> clauses;
 	Clause empty = {};
 	InputClauses phi;
@@ -150,17 +169,41 @@ int main(int argc, char **argv) {
 	
 	allPossibleClauses(symbols, empty, 0, clauses);
 
-	bool hasNext = nextInput(clauses, phi);
+	std::vector<std::vector<int>> inputs, accepted;
+	for (auto i = 0; i < clauses.size(); i++) {
+		inputs.push_back({i});
+	}
+
 	int done = 0;
-	while (hasNext) {
-		Model model = check(phi, FINITE);
-		printf("%5d %5d %s\n", done, phi.rules.size(), model.satisfied ? "YES" : "NO");
-		done++;
-		if (model.satisfied) {
-			hasNext = nextInput(clauses, phi);
-		} else {
-			hasNext = skipInput(clauses, phi);
+	int size = 1;
+	while (true) {
+		printf("generated: %d\n", inputs.size());
+		if (inputs.size() == 0) break;
+		for (auto input : inputs) {
+			phi.rules.clear();
+			for (auto i : input) {
+				phi.rules.push_back(clauses[i]);
+			}
+
+			Model model = check(phi, FINITE);
+			done++;
+			if (!model.satisfied) {
+				printf("%5d %5d %5d %s\n", done, (int)phi.rules.size(), model.lo.size(), model.satisfied ? "YES" : "NO");
+			}
+
+			if (model.satisfied) {
+				accepted.push_back(input);
+			}
 		}
+		printf("accepted: %d\n", accepted.size());
+
+		std::vector<int> temp;
+		inputs.clear();
+		if (accepted.size() > size) {
+			buildSet(accepted, inputs, temp, 0, size, size);
+		}
+		accepted.clear();
+		size++;
 	}
 }
 

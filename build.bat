@@ -2,13 +2,16 @@
 SETLOCAL
 setlocal EnableDelayedExpansion
 
+
+pushd .
 call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x86 > nul 2>&1
 call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvarsall.bat" x86 > nul 2>&1
 call "C:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x86 > nul 2>&1
+popd
 
 set "_libs= kernel32.lib user32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib"
 
-cl /nologo /EHa /W4 /MD /Zi main.cpp /I..\include /link /NOLOGO /OUT:debug.exe %_libs%
+cl /nologo /EHa /O2 /W4 /MD /Zi main.cpp /I..\include /link /NOLOGO /OUT:debug.exe %_libs%
 
 REM -arch:IA32, SSE, SSE2, AVX, AVX2
 REM -Dname defines macro
