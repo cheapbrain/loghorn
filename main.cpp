@@ -144,7 +144,7 @@ void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> 
 int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
-	int num_letters = 3;
+	int num_letters = 2;
 
 	std::vector<std::string> labels;
 	FormulaVector symbols;
@@ -170,14 +170,14 @@ int main(int argc, char **argv) {
 	allPossibleClauses(symbols, empty, 0, clauses);
 
 	std::vector<std::vector<int>> inputs, accepted;
-	for (auto i = 0; i < clauses.size(); i++) {
+	for (auto i = 0; i < (int)clauses.size(); i++) {
 		inputs.push_back({i});
 	}
 
 	int done = 0;
 	int size = 1;
 	while (true) {
-		printf("generated: %d\n", inputs.size());
+		printf("generated: %d\n", (int)inputs.size());
 		if (inputs.size() == 0) break;
 		for (auto input : inputs) {
 			phi.rules.clear();
@@ -187,19 +187,48 @@ int main(int argc, char **argv) {
 
 			Model model = check(phi, FINITE);
 			done++;
+			printf("%5d %5d %5d %s\n", done, (int)phi.rules.size(), model.lo.size(), model.satisfied ? "YES" : "NO");
 			if (!model.satisfied) {
-				printf("%5d %5d %5d %s\n", done, (int)phi.rules.size(), model.lo.size(), model.satisfied ? "YES" : "NO");
+				continue;
+			}
+
+			for (auto t = 1; t < model.lo.size() - 1; t++) {
+				if (t == model.start.first || t == model.start.second) continue;
+
+				const auto &aRequestsCurrent = model.lo.get(0, t);
+				const auto &aRequestsNext = model.lo.get(0, t+1);
+				for (auto f: aRequestsCurrent) {
+					if (f.type == BOXA && aRequestsNext.count(f) == 0) {
+						printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t, 0, t+1);
+						printState(phi, model.lo, model.lo.size());
+						return 0;
+					}
+				}
+			}
+
+			for (auto t = 2; t < model.lo.size(); t++) {
+				if (t == model.start.first || t == model.start.second) continue;
+
+				const auto &aRequestsCurrent = model.lo.get(0, t);
+				const auto &aRequestsPrevious = model.lo.get(0, t-1);
+				for (auto f: aRequestsCurrent) {
+					if (f.type == BOXA_BAR && aRequestsPrevious.count(f) == 0) {
+						printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t-1, 0, t);
+						printState(phi, model.lo, model.lo.size());
+						return 0;
+					}
+				}
 			}
 
 			if (model.satisfied) {
 				accepted.push_back(input);
 			}
 		}
-		printf("accepted: %d\n", accepted.size());
+		printf("accepted: %d\n", (int)accepted.size());
 
 		std::vector<int> temp;
 		inputs.clear();
-		if (accepted.size() > size) {
+		if ((int)accepted.size() > size) {
 			buildSet(accepted, inputs, temp, 0, size, size);
 		}
 		accepted.clear();
