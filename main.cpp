@@ -185,7 +185,70 @@ bool checkMinimumModel(InputClauses &phi, Model &model) {
 	return true;
 }
 
-void workerLoop(InputClauses &phi, Case caseType) {
+std::vector<InputClauses> genInputBatch(std::vector<Clause> &clauses, InputClauses &inputTemplate, int OriginalTargetLength, int batchLength, int maxFalseClauses) {
+
+	generate_mutex.lock();
+	std::vector<InputClauses> batch(batchLength);
+
+	for (auto &phi : batch) {
+		phi = inputTemplate;
+		int remaining = clauses.size();
+		int targetLength = OriginalTargetLength;
+		int falseClausesCount = 0;
+
+		for (auto clause : clauses) {
+			float value = (float)rand() / RAND_MAX;
+			float k = (float)targetLength / remaining;
+
+			if (value < k) {
+
+				if (maxFalseClauses > 0 && clause.back().id == FALSEHOOD) {
+
+					if (falseClausesCount >= maxFalseClauses) {
+						--remaining;
+						continue;
+					} else {
+						++falseClausesCount;
+					}
+				}
+
+				phi.rules.push_back(clause);
+				--targetLength;
+			}
+			--remaining;
+		}
+	}
+	generate_mutex.unlock();
+
+	return batch;
+}
+
+void workerLoop(std::vector<Clause> &clauses, InputClauses &inputTemplate, Case caseType, int thread_id) {
+	using namespace std::chrono;
+
+	while (true) {
+
+		auto batch = genInputBatch(clauses, inputTemplate, 4, 100, 1);
+
+		for (auto &phi : batch) {
+
+			auto t1 = high_resolution_clock::now();
+
+			Model model = check(phi, caseType);
+
+			auto t2 = high_resolution_clock::now();
+			double time = (duration_cast<duration<double>>(t2 - t1)).count();
+
+			printf("%2d %2d %5d %5d %3s %10.5f\n", thread_id, (int)phi.labels.size()-2, (int)phi.rules.size(), (int)model.lo.size(), model.satisfied ? "YES" : "NO", time);
+
+			if (checkMinimumModel(phi, model) == false) {
+				fprintf(stderr, "ERRORE\n");
+				return;
+			}
+
+		}
+
+	}
 
 }
 
@@ -193,7 +256,7 @@ int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
 	int num_letters = 2;
-	int num_threads = 8;
+	int num_threads = 1;
 	auto caseType = FINITE;
 
 	std::vector<std::string> labels;
@@ -233,14 +296,12 @@ int main(int argc, char **argv) {
 		clauses = tempClauses;
 	}
 
-
-
 	std::vector<std::thread> threads;
-	for (auto caseType : caseTypes) {
+	for (int thread_id = 0; thread_id < num_threads; thread_id++) {
 		stdout_mutex.lock();
-		printf("Starting check of the %s case.\n", caseStrings[caseType]);
+		printf("Starting thread n: %d\n", thread_id);
 		stdout_mutex.unlock();
-		std::thread th(check, std::ref(phi), caseType);
+		std::thread th(workerLoop, std::ref(clauses), std::ref(phi), caseType, thread_id);
 		threads.push_back(std::move(th));
 	}
 
