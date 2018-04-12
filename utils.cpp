@@ -1,65 +1,80 @@
 
 #include "horn.hpp"
 
-void printFormula(const InputClauses& phi, const Formula f, bool universal) {
+void printFormula(FILE *stream, const InputClauses& phi, const Formula f, bool universal) {
 	auto prefix = universal ? "[U] " : "";
 	if (f.type == CLAUSE) {
 		Clause c = phi.rules[f.id];
 		for (auto& l : c) {
-			if (&l == &c.back())       printf("%s", " -> ");
-			else if (&l == &c.front()) printf("%s", prefix);
-			else                       printf("%s", " & ");
+			if (&l == &c.back())       fprintf(stream, "%s", " -> ");
+			else if (&l == &c.front()) fprintf(stream, "%s", prefix);
+			else                       fprintf(stream, "%s", " & ");
 			printFormula(phi, l, false);
 		}
 		return;
 
 	} else if (f.type == BOXA) {
-		printf("[A]");
+		fprintf(stream, "[A]");
 	} else if (f.type == BOXA_BAR) {
-		printf("[P]");
+		fprintf(stream, "[P]");
 	}
 
-	printf("%s", phi.labels[f.id].c_str());
+	fprintf(stream, "%s", phi.labels[f.id].c_str());
+}
+void printFormula(const InputClauses& phi, const Formula f, bool universal) {
+	printFormula(stdout, phi, f, universal);
 }
 
+void printInterval(FILE *stream, const InputClauses& phi, const Interval& interval, const FormulaSet& formulas) {
+	if (formulas.size() == 0) return;
+	fprintf(stream, "[%d, %d]: ",interval.first, interval.second);
+	for(auto f: formulas) {
+		fprintf(stream, "\n\t");
+		printFormula(phi, f, false);
+	}
+	fprintf(stream, "\n");
+}
 void printInterval(const InputClauses& phi, const Interval& interval, const FormulaSet& formulas) {
-	if (formulas.size() == 0) return;
-	printf("[%d, %d]: ",interval.first, interval.second);
-	for(auto f: formulas) {
-		printf("\n\t");
-		printFormula(phi, f, false);
-	}
-	printf("\n");
+	printInterval(stdout, phi, interval, formulas);
 }
 
+void printInterval(FILE *stream, const InputClauses& phi, const Interval& interval, const FormulaVector& formulas) {
+	if (formulas.size() == 0) return;
+	fprintf(stream, "[%d, %d]: ",interval.first, interval.second);
+	for(auto f: formulas) {
+		fprintf(stream, "\n\t");
+		printFormula(phi, f, false);
+	}
+	fprintf(stream, "\n");
+}
 void printInterval(const InputClauses& phi, const Interval& interval, const FormulaVector& formulas) {
-	if (formulas.size() == 0) return;
-	printf("[%d, %d]: ",interval.first, interval.second);
-	for(auto f: formulas) {
-		printf("\n\t");
-		printFormula(phi, f, false);
-	}
-	printf("\n");
+	printInterval(stdout, phi, interval, formulas);
 }
 
+void printState(FILE *stream, const InputClauses& phi, IntervalVector<FormulaSet> &intervals, int d) {
+	for (int z = 0; z < d - 1; z++) {
+		for (int t = z + 1; t < d; t++) {
+			auto i = intervals.get(z, t);
+			printInterval(phi, {z, t}, i);
+		}
+	}
+	fprintf(stream, "\n");
+}
 void printState(const InputClauses& phi, IntervalVector<FormulaSet> &intervals, int d) {
-	for (int z = 0; z < d - 1; z++) {
-		for (int t = z + 1; t < d; t++) {
-			auto i = intervals.get(z, t);
-			printInterval(phi, {z, t}, i);
-		}
-	}
-	printf("\n");
+	printState(stdout, phi, intervals, d);
 }
 
-void printState(const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d) {
+void printState(FILE *stream, const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d) {
 	for (int z = 0; z < d - 1; z++) {
 		for (int t = z + 1; t < d; t++) {
 			auto i = intervals.get(z, t);
 			printInterval(phi, {z, t}, i);
 		}
 	}
-	printf("\n");
+	fprintf(stream, "\n");
+}
+void printState(const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d) {
+	printState(stdout, phi, intervals, d);
 }
 
 struct TokInfo {

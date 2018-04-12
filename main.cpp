@@ -9,19 +9,22 @@ std::mutex generate_mutex;
 
 bool print_messages = false;
 
-void print(InputClauses &phi) {
-	printf("---- Rules ----\n");
+void fprint(FILE *stream, InputClauses &phi) {
+	fprintf(stream, "---- Rules ----\n");
 	for (size_t i = 0; i < phi.rules.size(); i++) {
-		printFormula(phi, Formula::create(CLAUSE, i), true);
-		printf("\n");
+		printFormula(stream, phi, Formula::create(CLAUSE, i), true);
+		fprintf(stream, "\n");
 	}
 
-	printf("---- Facts ----\n");
+	fprintf(stream, "---- Facts ----\n");
 	for (auto fact : phi.facts) {
-		printFormula(phi, fact, false);
-		printf("\n");
+		printFormula(stream, phi, fact, false);
+		fprintf(stream, "\n");
 	}
-	printf("---------------\n\n");
+	fprintf(stream, "---------------\n\n");
+}
+void print(InputClauses &phi) {
+	fprint(stdout, phi);
 }
 
 void print(std::vector<int> v) {
@@ -148,6 +151,14 @@ void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> 
 	}
 }
 
+void printPropertyError(InputClauses &phi, Model &model, int s, int t, int w, int z) {
+	stdout_mutex.lock();
+	fprint(stderr, phi);
+	fprintf(stderr, "The property doesn't hold true at {%d, %d} and {%d, %d}\n", s, t, w, z);
+	printState(stderr, phi, model.lo, model.lo.size());
+	stdout_mutex.unlock();
+}
+
 bool checkMinimumModel(InputClauses &phi, Model &model) {
 
 	if (!model.satisfied) {
@@ -161,8 +172,7 @@ bool checkMinimumModel(InputClauses &phi, Model &model) {
 		const auto &aRequestsNext = model.lo.get(0, t+1);
 		for (auto f: aRequestsCurrent) {
 			if (f.type == BOXA && aRequestsNext.count(f) == 0) {
-				printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t, 0, t+1);
-				printState(phi, model.lo, model.lo.size());
+				printPropertyError(phi, model, 0, t, 0, t+1);
 				return false;
 			}
 		}
@@ -175,8 +185,7 @@ bool checkMinimumModel(InputClauses &phi, Model &model) {
 		const auto &aRequestsPrevious = model.lo.get(0, t-1);
 		for (auto f: aRequestsCurrent) {
 			if (f.type == BOXA_BAR && aRequestsPrevious.count(f) == 0) {
-				printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t-1, 0, t);
-				printState(phi, model.lo, model.lo.size());
+				printPropertyError(phi, model, 0, t-1, 0, t);
 				return false;
 			}
 		}
@@ -467,13 +476,15 @@ Model check(InputClauses &phi, Case caseType) {
 
 	State state = {caseType, phi};
 	FormulaSet literals(phi.facts.begin(), phi.facts.end());
-	for (auto& clause : phi.rules)
+	for (auto& clause : phi.rules) {
 		std::copy(clause.begin(), clause.end(), std::inserter(literals, literals.end()));
+	}
 	for (auto l : literals) {
-		if (l.type == BOXA)
+		if (l.type == BOXA) {
 			state.boxa.push_back(l);
-		else if (l.type == BOXA_BAR)
+		} else if (l.type == BOXA_BAR) {
 			state.boxaBar.push_back(l);
+		}
 	}
 
 	int xmin = (caseType == DISCRETE);
@@ -487,16 +498,19 @@ Model check(InputClauses &phi, Case caseType) {
 			stdout_mutex.unlock();
 		}
 
-		for (int x = xmin; x < ymax - 1; x++)
+		for (int x = xmin; x < ymax - 1; x++) {
 			for (int y = x + 1; y < ymax; y++) {
 				Model solution = saturate(k, x, y, state);
-				if (solution.satisfied)
+				if (solution.satisfied) {
 					return solution;
+				}
 			}
+		}
 	}
 
-	if (print_messages)
+	if (print_messages) {
 		printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
+	}
 	return Model::unsatisfied();
 }
 
@@ -639,12 +653,10 @@ int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>&
 		for (auto f : last) {
 			if (f.type == LETTER) {
 				temp.push_back(Formula::create(BOXA, f.id));
-			} 
-			else if (f.type == BOXA) {
+			} else if (f.type == BOXA) {
 				if (f.id == FALSEHOOD) return 2;
 				temp.push_back(Formula::create(LETTER, f.id));
-			} 
-			else if (f.type == BOXA_BAR) {
+			} else if (f.type == BOXA_BAR) {
 				if (f.id == FALSEHOOD) return 2;
 				temp.push_back(Formula::create(LETTER, f.id));
 			}
@@ -678,12 +690,10 @@ int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>&
 			for (auto f : first) {
 				if (f.type == LETTER) {
 					temp.push_back(Formula::create(BOXA_BAR, f.id));
-				}
-				else if (f.type == BOXA) {
+				} else if (f.type == BOXA) {
 					if (f.id == FALSEHOOD) return 2;
 					temp.push_back(Formula::create(LETTER, f.id));
-				}
-				else if (f.type == BOXA_BAR) {
+				} else if (f.type == BOXA_BAR) {
 					if (f.id == FALSEHOOD) return 2;
 					temp.push_back(Formula::create(LETTER, f.id));
 				}
@@ -706,8 +716,9 @@ int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>&
 				}
 			}
 			if (found) {
-				for (int r = 0; r < z; r++)
+				for (int r = 0; r < z; r++) {
 					if (lo.get(r, z).insert(f).second) changed = 1;
+				}
 			}
 		}
 
@@ -721,8 +732,9 @@ int extend(int d, IntervalVector<FormulaVector>& hi, IntervalVector<FormulaSet>&
 				}
 			}
 			if (found) {
-				for (int t = z + 1; t < d; t++)
+				for (int t = z + 1; t < d; t++) {
 					if (lo.get(z, t).insert(f).second) changed = 1;
+				}
 			}
 		}
 
