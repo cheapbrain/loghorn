@@ -136,6 +136,12 @@ void printInterval(const InputClauses& phi, const Interval& interval, const Form
 void printState(const InputClauses& phi, IntervalVector<FormulaSet> &intervals, int d);
 void printState(const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d);
 
+void printFormula(FILE *stream, const InputClauses& phi, const Formula f, bool universal);
+void printInterval(FILE *stream, const InputClauses& phi, const Interval& interval, const FormulaSet& formulas);
+void printInterval(FILE *stream, const InputClauses& phi, const Interval& interval, const FormulaVector& formulas);
+void printState(FILE *stream, const InputClauses& phi, IntervalVector<FormulaSet> &intervals, int d);
+void printState(FILE *stream, const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d);
+
 /* Parse / Generator Utilities */
 std::string numToLabel(int n);
 InputClauses parseFile(const char* path);
