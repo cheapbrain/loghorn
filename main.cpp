@@ -5,6 +5,8 @@
 #include "generate.cpp"
 
 std::mutex stdout_mutex;
+std::mutex generate_mutex;
+
 bool print_messages = false;
 
 void print(InputClauses &phi) {
@@ -37,7 +39,7 @@ void print(std::vector<std::vector<int>> v) {
 	}
 }
 
-void allPossibleClauses(FormulaVector &symbols, Clause &clause, int start, std::vector<Clause> &clauses) {
+void allPossibleClauses(FormulaVector &symbols, int start, std::vector<Clause> &clauses, Clause &clause) {
 
 	if (clause.size() > 0) {
 		for (auto f : symbols) {
@@ -55,9 +57,14 @@ void allPossibleClauses(FormulaVector &symbols, Clause &clause, int start, std::
 
 	for (size_t i = start; i < symbols.size(); i++) {
 		clause.push_back(symbols[i]);
-		allPossibleClauses(symbols, clause, i+1, clauses);
+		allPossibleClauses(symbols, i+1, clauses, clause);
 		clause.pop_back();
 	}
+}
+
+void allPossibleClauses(FormulaVector &symbols, int start, std::vector<Clause> &clauses) {
+	Clause empty = {};
+	allPossibleClauses(symbols, start, clauses, empty);
 }
 
 void allPossibleInputs(std::vector<Clause> &clauses, int start, InputClauses &phi, std::vector<InputClauses> &inputs) {
@@ -128,7 +135,7 @@ std::vector<int> setUnion(std::vector<int> &a, std::vector<int> &b) {
 
 void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> &out, std::vector<int> &temp, int start, int depth, unsigned int size) {
 	auto tempsize = temp.size();
-	for (unsigned int i = start; i < old.size() - depth; i++) {
+	for (size_t i = start; i < old.size() - depth; i++) {
 		auto newSet = setUnion(old[i], temp);
 
 		if (depth > 0) {
@@ -141,10 +148,53 @@ void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> 
 	}
 }
 
+bool checkMinimumModel(InputClauses &phi, Model &model) {
+
+	if (!model.satisfied) {
+		return true;
+	}
+
+	for (auto t = 1; t < (int)model.lo.size() - 1; t++) {
+		if (t == model.start.first || t == model.start.second) continue;
+
+		const auto &aRequestsCurrent = model.lo.get(0, t);
+		const auto &aRequestsNext = model.lo.get(0, t+1);
+		for (auto f: aRequestsCurrent) {
+			if (f.type == BOXA && aRequestsNext.count(f) == 0) {
+				printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t, 0, t+1);
+				printState(phi, model.lo, model.lo.size());
+				return false;
+			}
+		}
+	}
+
+	for (auto t = 2; t < (int)model.lo.size(); t++) {
+		if (t == model.start.first || t == model.start.second) continue;
+
+		const auto &aRequestsCurrent = model.lo.get(0, t);
+		const auto &aRequestsPrevious = model.lo.get(0, t-1);
+		for (auto f: aRequestsCurrent) {
+			if (f.type == BOXA_BAR && aRequestsPrevious.count(f) == 0) {
+				printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t-1, 0, t);
+				printState(phi, model.lo, model.lo.size());
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+void workerLoop(InputClauses &phi, Case caseType) {
+
+}
+
 int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
 	int num_letters = 2;
+	int num_threads = 8;
+	auto caseType = FINITE;
 
 	std::vector<std::string> labels;
 	FormulaVector symbols;
@@ -152,6 +202,7 @@ int main(int argc, char **argv) {
 	labels.push_back("F");
 	labels.push_back("T");
 
+	// creates all the symbols used for generating the clauses
 	for (int i = 0; i < num_letters; i++) {
 		std::string label = numToLabel(i);
 		labels.push_back(label);
@@ -162,13 +213,43 @@ int main(int argc, char **argv) {
 	}
 
 	std::vector<Clause> clauses;
-	Clause empty = {};
+	allPossibleClauses(symbols, 0, clauses);
+
 	InputClauses phi;
 	phi.labels = labels;
 	phi.facts.push_back(Formula::create(LETTER, 2));
 	
-	allPossibleClauses(symbols, empty, 0, clauses);
+	// reduce the number of clauses by removing the ones that are not satisfiable
+	{
+		std::vector<Clause> tempClauses;
+		for (auto i = clauses.size(); i-- > 0; ) {
+			phi.rules.clear();
+			phi.rules.push_back(clauses[i]);
+			Model model = check(phi, FINITE);
+			if (model.satisfied) {
+				tempClauses.push_back(clauses[i]);
+			}
+		}
+		clauses = tempClauses;
+	}
 
+
+
+	std::vector<std::thread> threads;
+	for (auto caseType : caseTypes) {
+		stdout_mutex.lock();
+		printf("Starting check of the %s case.\n", caseStrings[caseType]);
+		stdout_mutex.unlock();
+		std::thread th(check, std::ref(phi), caseType);
+		threads.push_back(std::move(th));
+	}
+
+	for (auto &th : threads) {
+		th.join();
+	};
+
+
+/*
 	std::vector<std::vector<int>> inputs, accepted;
 	for (auto i = 0; i < (int)clauses.size(); i++) {
 		inputs.push_back({i});
@@ -187,37 +268,10 @@ int main(int argc, char **argv) {
 
 			Model model = check(phi, FINITE);
 			done++;
-			printf("%5d %5d %5d %s\n", done, (int)phi.rules.size(), model.lo.size(), model.satisfied ? "YES" : "NO");
-			if (!model.satisfied) {
-				continue;
-			}
+			printf("%5d %5d %5d %s\n", done, (int)phi.rules.size(), (int)model.lo.size(), model.satisfied ? "YES" : "NO");
 
-			for (auto t = 1; t < model.lo.size() - 1; t++) {
-				if (t == model.start.first || t == model.start.second) continue;
-
-				const auto &aRequestsCurrent = model.lo.get(0, t);
-				const auto &aRequestsNext = model.lo.get(0, t+1);
-				for (auto f: aRequestsCurrent) {
-					if (f.type == BOXA && aRequestsNext.count(f) == 0) {
-						printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t, 0, t+1);
-						printState(phi, model.lo, model.lo.size());
-						return 0;
-					}
-				}
-			}
-
-			for (auto t = 2; t < model.lo.size(); t++) {
-				if (t == model.start.first || t == model.start.second) continue;
-
-				const auto &aRequestsCurrent = model.lo.get(0, t);
-				const auto &aRequestsPrevious = model.lo.get(0, t-1);
-				for (auto f: aRequestsCurrent) {
-					if (f.type == BOXA_BAR && aRequestsPrevious.count(f) == 0) {
-						printf("The property doesn't hold true at {%d, %d} and {%d, %d}\n", 0, t-1, 0, t);
-						printState(phi, model.lo, model.lo.size());
-						return 0;
-					}
-				}
+			if (checkMinimumModel(phi, model) == false) {
+				return 0;
 			}
 
 			if (model.satisfied) {
@@ -234,6 +288,7 @@ int main(int argc, char **argv) {
 		accepted.clear();
 		size++;
 	}
+	*/
 }
 
 int amain(int argc, char **argv) {
@@ -414,7 +469,7 @@ Model saturate(int d, int x, int y, const State& state) {
 			for (int t = z + 1; t < d; t++) {
 				auto& hizt = hi.get(z, t);
 
-				for (int ii = hizt.size()-1; ii >= 0; ii--) {
+				for (auto ii = hizt.size(); ii-- > 0; ) {
 					auto f = hizt[ii];
 
 					if (f.type == LETTER && f.id == TRUTH) {

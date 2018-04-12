@@ -96,7 +96,7 @@ inline void eraseFast(FormulaVector& v, int i) {
 
 template<typename T> struct IntervalVector {
 	private:
-		int n;
+		size_t n;
 		std::vector<T> v;
 		int getIndex(int x, int y) {
 			x = (n - x) - 2;
@@ -106,11 +106,11 @@ template<typename T> struct IntervalVector {
 
 	public:
 		IntervalVector() : n(0), v() {}
-		IntervalVector(int size) : n(size), v(size * (size + 1) /2) {}
+		IntervalVector(size_t size) : n(size), v(size * (size + 1) /2) {}
 		T& get(int x, int y) {
 			return v[getIndex(x, y)];
 		}
-		int size() {
+		size_t size() {
 			return n;
 		}
 };
