@@ -1,4 +1,5 @@
 
+#include "argh.h"
 #include "horn.hpp"
 
 #include "utils.cpp"
@@ -252,7 +253,6 @@ void workerLoop(std::vector<Clause> &clauses, InputClauses &inputTemplate, Case 
 
 			if (checkMinimumModel(phi, model) == false) {
 				fprintf(stderr, "ERRORE\n");
-				return;
 			}
 
 		}
@@ -262,6 +262,48 @@ void workerLoop(std::vector<Clause> &clauses, InputClauses &inputTemplate, Case 
 }
 
 int main(int argc, char **argv) {
+	srand((unsigned int)time(NULL));
+
+	auto cmdl = argh::parser(argc, argv);
+
+	bool bench;
+	bool verbose;
+	std::string fileName;
+	std::string caseName;
+	int numThreads;
+	int numLetters;
+	int numClauses;
+
+	bench = cmdl["bench"];
+	verbose = cmdl["verbose"];
+	cmdl({"-f", "--file"}, "NOFILE") >> fileName;
+	cmdl({"-m", "--model_type"}, "FINITE") >> caseName;
+	cmdl({"-t", "--num_threads"}, 1) >> numThreads;
+	cmdl({"-l", "--num_letters"}, 3) >> numLetters;
+	cmdl({"-c", "--num_clauses"}, 4) >> numClauses;
+
+	if (verbose) {
+		print_messages = true;
+	}
+
+	if (fileName == "NOFILE") {
+
+		if (bench) {
+			
+		} else {
+
+		}
+
+	} else {
+
+	}
+
+	std::cout << bench << fileName << numThreads;
+
+	return 0;
+}
+
+int cmain(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
 	int num_letters = 2;
@@ -307,9 +349,6 @@ int main(int argc, char **argv) {
 
 	std::vector<std::thread> threads;
 	for (int thread_id = 0; thread_id < num_threads; thread_id++) {
-		stdout_mutex.lock();
-		printf("Starting thread n: %d\n", thread_id);
-		stdout_mutex.unlock();
 		std::thread th(workerLoop, std::ref(clauses), std::ref(phi), caseType, thread_id);
 		threads.push_back(std::move(th));
 	}
@@ -318,47 +357,7 @@ int main(int argc, char **argv) {
 		th.join();
 	};
 
-
-/*
-	std::vector<std::vector<int>> inputs, accepted;
-	for (auto i = 0; i < (int)clauses.size(); i++) {
-		inputs.push_back({i});
-	}
-
-	int done = 0;
-	int size = 1;
-	while (true) {
-		printf("generated: %d\n", (int)inputs.size());
-		if (inputs.size() == 0) break;
-		for (auto input : inputs) {
-			phi.rules.clear();
-			for (auto i : input) {
-				phi.rules.push_back(clauses[i]);
-			}
-
-			Model model = check(phi, FINITE);
-			done++;
-			printf("%5d %5d %5d %s\n", done, (int)phi.rules.size(), (int)model.lo.size(), model.satisfied ? "YES" : "NO");
-
-			if (checkMinimumModel(phi, model) == false) {
-				return 0;
-			}
-
-			if (model.satisfied) {
-				accepted.push_back(input);
-			}
-		}
-		printf("accepted: %d\n", (int)accepted.size());
-
-		std::vector<int> temp;
-		inputs.clear();
-		if ((int)accepted.size() > size) {
-			buildSet(accepted, inputs, temp, 0, size, size);
-		}
-		accepted.clear();
-		size++;
-	}
-	*/
+	return 0;
 }
 
 int amain(int argc, char **argv) {
