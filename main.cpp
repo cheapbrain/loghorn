@@ -160,7 +160,7 @@ void printPropertyError(InputClauses &phi, Model &model, int s, int t, int w, in
 	stdout_mutex.unlock();
 }
 
-bool checkMinimumModel(InputClauses &phi, Model &model) {
+bool checkMinimumModelAndLog(InputClauses &phi, Model &model) {
 
 	if (!model.satisfied) {
 		return true;
@@ -195,10 +195,10 @@ bool checkMinimumModel(InputClauses &phi, Model &model) {
 	return true;
 }
 
-std::vector<InputClauses> genInputBatch(std::vector<Clause> &clauses, InputClauses &inputTemplate, int OriginalTargetLength, int batchLength, int maxFalseClauses) {
+std::vector<InputClauses> genInputBatch(std::vector<Clause> &clauses, InputClauses &inputTemplate, int OriginalTargetLength, int batchSize, int maxFalseClauses) {
 
 	generate_mutex.lock();
-	std::vector<InputClauses> batch(batchLength);
+	std::vector<InputClauses> batch(batchSize);
 
 	for (auto &phi : batch) {
 		phi = inputTemplate;
@@ -233,54 +233,90 @@ std::vector<InputClauses> genInputBatch(std::vector<Clause> &clauses, InputClaus
 	return batch;
 }
 
-void workerLoop(std::vector<Clause> &clauses, InputClauses &inputTemplate, Case caseType, int thread_id) {
+void workerLoop(std::vector<Clause> &clauses, InputClauses &inputTemplate, Case caseType, int numClauses, int batchSize, int maxFalseClauses) {
 	using namespace std::chrono;
 
 	while (true) {
 
-		auto batch = genInputBatch(clauses, inputTemplate, 4, 100, 1);
+		auto batch = genInputBatch(clauses, inputTemplate, 
+			numClauses, batchSize, maxFalseClauses);
 
 		for (auto &phi : batch) {
 
 			auto t1 = high_resolution_clock::now();
-
 			Model model = check(phi, caseType);
-
 			auto t2 = high_resolution_clock::now();
+
 			double time = (duration_cast<duration<double>>(t2 - t1)).count();
+			printf("%d\t%d\t%d\t%s\t%.7f\n", 
+				(int)phi.labels.size()-2, (int)phi.rules.size(), 
+				(int)model.lo.size(), model.satisfied ? "YES" : "NO", time);
 
-			printf("%2d %2d %5d %5d %3s %10.5f\n", thread_id, (int)phi.labels.size()-2, (int)phi.rules.size(), (int)model.lo.size(), model.satisfied ? "YES" : "NO", time);
-
-			if (checkMinimumModel(phi, model) == false) {
-				fprintf(stderr, "ERRORE\n");
-			}
-
+			checkMinimumModelAndLog(phi, model);
 		}
 
 	}
 
 }
 
+Case parseCaseType(const std::string &caseName) {
+	for (int i = 0; i <= INVALID_CASE; i++) {
+		if (!strcmp(caseStrings[i], caseName.c_str())) {
+			return (Case)i;
+		}
+	}
+	return INVALID_CASE;
+}
+
+void runCheckAndLog(InputClauses &phi, Case caseType) {
+	printf("Starting check of the %s case.\n", caseStrings[caseType]);
+
+	Model model = check(phi, caseType);
+
+	if (model.satisfied) {
+		printf("The clause set is SATISFIABLE in the %s case, "
+			"with size %d and starting interval [%d, %d]\n", 
+			caseStrings[caseType], (int)model.lo.size(), 
+			model.start.first, model.start.second );
+	} else {
+		printf("The clause set is NOT SATISFIABLE in the %s case\n", caseStrings[caseType]);
+	}
+}
+
 int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
-	auto cmdl = argh::parser(argc, argv);
+	auto cmdl = argh::parser(argc, argv, 
+		argh::parser::PREFER_PARAM_FOR_UNREG_OPTION | 
+		argh::parser::SINGLE_DASH_IS_MULTIFLAG);
 
-	bool bench;
-	bool verbose;
-	std::string fileName;
-	std::string caseName;
-	int numThreads;
-	int numLetters;
-	int numClauses;
+	bool bench, verbose;
+	std::string fileName, caseName;
+	int numThreads, numLetters, numClauses, batchSize, maxFalseClauses;
 
-	bench = cmdl["bench"];
-	verbose = cmdl["verbose"];
+	bench = cmdl[{"-b", "--bench"}];
+	verbose = cmdl[{"-v", "--verbose"}];
 	cmdl({"-f", "--file"}, "NOFILE") >> fileName;
 	cmdl({"-m", "--model_type"}, "FINITE") >> caseName;
-	cmdl({"-t", "--num_threads"}, 1) >> numThreads;
-	cmdl({"-l", "--num_letters"}, 3) >> numLetters;
-	cmdl({"-c", "--num_clauses"}, 4) >> numClauses;
+	if (!(cmdl({"-t", "--num_threads"}, 1) >> numThreads)) 
+		{ fprintf(stderr, "Pass a valid integer as the number of threads\n"); return 1; }
+	if (!(cmdl({"-l", "--num_letters"}, 3) >> numLetters)) 
+		{ fprintf(stderr, "Pass a valid integer as the number of letters\n"); return 1; }
+	if (!(cmdl({"-c", "--num_clauses"}, 4) >> numClauses)) 
+		{ fprintf(stderr, "Pass a valid integer as the number of clauses\n"); return 1; }
+	if (!(cmdl({"-n", "--batch_size"}, 1) >> batchSize)) 
+		{ fprintf(stderr, "Pass a valid integer as the batch size\n"); return 1; }
+	if (!(cmdl({"--max_false_clauses"}, 0) >> maxFalseClauses)) 
+		{ fprintf(stderr, "Pass a valid integer as the max number of false clauses\n"); return 1; }
+
+	for (auto & c: caseName) {
+		c = toupper(c); 
+	}
+	Case caseType = parseCaseType(caseName);
+	if (caseType == INVALID_CASE) 
+		{ fprintf(stderr, "Invalid model type, use: FINITE, NATURAL, DISCRETE, ALL_CASES\n"); return 1; }
+	if (fileName == "NOFILE" && caseType == ALL_CASES) 
+		{ fprintf(stderr, "You can't use ALL_CASES with random generated input\n"); return 1; }
 
 	if (verbose) {
 		print_messages = true;
@@ -288,178 +324,83 @@ int main(int argc, char **argv) {
 
 	if (fileName == "NOFILE") {
 
+		std::vector<std::string> labels;
+		FormulaVector symbols;
+
+		labels.push_back("F");
+		labels.push_back("T");
+
+		// creates all the symbols used for generating the clauses
+		for (int i = 0; i < numLetters; i++) {
+			std::string label = numToLabel(i);
+			labels.push_back(label);
+
+			symbols.push_back(Formula::create(LETTER, i+2));
+			symbols.push_back(Formula::create(BOXA, i+2));
+			symbols.push_back(Formula::create(BOXA_BAR, i+2));
+		}
+
+		std::vector<Clause> clauses;
+		allPossibleClauses(symbols, 0, clauses);
+
+		InputClauses inputTemplate;
+		inputTemplate.labels = labels;
+		inputTemplate.facts.push_back(Formula::create(LETTER, 2));
+
 		if (bench) {
-			
+
+			printf("%s\t%s\t%s\t%s\t%s\n", "NUM_LETTERS", "NUM_CLAUSES", "MODEL_SIZE", "SATISFIED", "TIME(s)");
+			// reduce the number of clauses by removing the ones that are not satisfiable
+			{
+				print_messages = false;
+				std::vector<Clause> tempClauses;
+				for (auto i = clauses.size(); i-- > 0; ) {
+					inputTemplate.rules.push_back(clauses[i]);
+					Model model = check(inputTemplate, caseType);
+					if (model.satisfied) { tempClauses.push_back(clauses[i]); }
+					inputTemplate.rules.clear();
+				}
+				clauses = tempClauses;
+				if (verbose) { print_messages = true; }
+			}
+
+			std::vector<std::thread> threads;
+			for (int threadId = 0; threadId < numThreads; threadId++) {
+				std::thread th(workerLoop, std::ref(clauses), std::ref(inputTemplate), caseType, numClauses, batchSize, maxFalseClauses);
+				threads.push_back(std::move(th));
+			}
+
+			for (auto &th : threads) {
+				th.join();
+			}
+
 		} else {
+			auto batch = genInputBatch(clauses, inputTemplate, numClauses, batchSize, maxFalseClauses);
+			for (auto &phi : batch) {
+				runCheckAndLog(phi, caseType);
+			}
 
 		}
 
 	} else {
+		InputClauses phi = parseFile(fileName.c_str());
 
-	}
+		if (caseType == ALL_CASES) {
+			std::vector<std::thread> threads;
+			threads.push_back(std::thread(runCheckAndLog, std::ref(phi), FINITE));
+			threads.push_back(std::thread(runCheckAndLog, std::ref(phi), NATURAL));
+			threads.push_back(std::thread(runCheckAndLog, std::ref(phi), DISCRETE));
 
-	std::cout << bench << fileName << numThreads;
-
-	return 0;
-}
-
-int cmain(int argc, char **argv) {
-	srand((unsigned int)time(NULL));
-
-	int num_letters = 2;
-	int num_threads = 1;
-	auto caseType = FINITE;
-
-	std::vector<std::string> labels;
-	FormulaVector symbols;
-
-	labels.push_back("F");
-	labels.push_back("T");
-
-	// creates all the symbols used for generating the clauses
-	for (int i = 0; i < num_letters; i++) {
-		std::string label = numToLabel(i);
-		labels.push_back(label);
-
-		symbols.push_back(Formula::create(LETTER, i+2));
-		symbols.push_back(Formula::create(BOXA, i+2));
-		symbols.push_back(Formula::create(BOXA_BAR, i+2));
-	}
-
-	std::vector<Clause> clauses;
-	allPossibleClauses(symbols, 0, clauses);
-
-	InputClauses phi;
-	phi.labels = labels;
-	phi.facts.push_back(Formula::create(LETTER, 2));
-	
-	// reduce the number of clauses by removing the ones that are not satisfiable
-	{
-		std::vector<Clause> tempClauses;
-		for (auto i = clauses.size(); i-- > 0; ) {
-			phi.rules.clear();
-			phi.rules.push_back(clauses[i]);
-			Model model = check(phi, FINITE);
-			if (model.satisfied) {
-				tempClauses.push_back(clauses[i]);
-			}
-		}
-		clauses = tempClauses;
-	}
-
-	std::vector<std::thread> threads;
-	for (int thread_id = 0; thread_id < num_threads; thread_id++) {
-		std::thread th(workerLoop, std::ref(clauses), std::ref(phi), caseType, thread_id);
-		threads.push_back(std::move(th));
-	}
-
-	for (auto &th : threads) {
-		th.join();
-	};
-
-	return 0;
-}
-
-int amain(int argc, char **argv) {
-	srand((unsigned int)time(NULL));
-
-	auto filename = "test.horn";
-	auto caseType = DISCRETE;
-
-	InputClauses phi;
-	print_messages = true;
-
-	if (argc > 1) {
-		filename = argv[1];
-		phi = parseFile(filename);
-	} else {
-		phi = randomInput(10, 2, 3, 0.5);
-	}
-
-	if (argc > 2) {
-		if (strcmp(argv[2], "FINITE") == 0) caseType = FINITE;
-		else if (strcmp(argv[2], "NATURAL") == 0) caseType = NATURAL;
-		else if (strcmp(argv[2], "DISCRETE") == 0) caseType = DISCRETE;
-		else if (strcmp(argv[2], "ALL") == 0) caseType = ALL;
-		else {
-			printf("The case \"%s\" is not valid.\n", argv[2]);
-			return 1;
-		}
-	}
-
-	std::vector<Case> caseTypes;
-	if (caseType == ALL)
-		caseTypes = { FINITE, NATURAL, DISCRETE };
-	else
-		caseTypes = { caseType };
-
-	print(phi);
-
-	std::vector<std::thread> threads;
-	for (auto caseType : caseTypes) {
-		stdout_mutex.lock();
-		printf("Starting check of the %s case.\n", caseStrings[caseType]);
-		stdout_mutex.unlock();
-		std::thread th(check, std::ref(phi), caseType);
-		threads.push_back(std::move(th));
-	}
-
-	for (auto &th : threads) {
-		th.join();
-	};
-
-	printf("Done.\n");
-	return 0;
-}
-
-int bmain(int argc, char **argv) {
-	using namespace std::chrono;
-	srand((unsigned int)time(NULL));
-
-	int min_clauses = 2;
-	int max_clauses = 100;
-
-	int min_letters = 2;
-	int max_letters = 20;
-
-	int clause_len = 3;
-	auto case_type = DISCRETE;
-
-	float falsehood_rate = 1.0;
-
-	int num_tests = 10;
-
-	printf("%s\t%s\t%s\t%s\n", "clauses", "letters", "seconds", "size");
-	for (int num_clauses = min_clauses; num_clauses < max_clauses; num_clauses++) {
-		for (int num_letters = min_letters; num_letters < max_letters; num_letters++) {
-
-			float tsize = 0;
-			double ttime = 0;
-			int ntests = 0;
-
-			std::vector<InputClauses> inputs;
-			for (int i = 0; i < num_tests; i++) {
-				InputClauses phi = randomInput(num_clauses, num_letters, clause_len, falsehood_rate);
-
-				auto t1 = high_resolution_clock::now();
-
-				Model solution = check(phi, case_type);
-
-				auto t2 = high_resolution_clock::now();
-
-				tsize += solution.lo.size();
-				ttime += (duration_cast<duration<double>>(t2 - t1)).count();
-				ntests++;
+			for (auto &th : threads) {
+				th.join();
 			}
 
-			tsize /= ntests;
-			ttime /= ntests;
-
-			printf("%d\t%d\t%.10f\t%.3f\n", num_clauses, num_letters, ttime, tsize);
+		} else {
+			runCheckAndLog(phi, caseType);
 
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -472,6 +413,12 @@ Model check(InputClauses &phi, Case caseType) {
 		default:		return Model::unsatisfied();
 	}
 	max = min + 6 * phi.rules.size(); 
+
+	if (print_messages) {
+		stdout_mutex.lock();
+		print(phi);
+		stdout_mutex.unlock();
+	}
 
 	State state = {caseType, phi};
 	FormulaSet literals(phi.facts.begin(), phi.facts.end());
@@ -507,9 +454,6 @@ Model check(InputClauses &phi, Case caseType) {
 		}
 	}
 
-	if (print_messages) {
-		printf("The formula is NOT SATISFIABLE in the %s case.\n", caseStrings[caseType]);
-	}
 	return Model::unsatisfied();
 }
 
@@ -609,8 +553,6 @@ Model saturate(int d, int x, int y, const State& state) {
 
 	if (print_messages) {
 		stdout_mutex.lock();
-		printf("The formula is SATISFIABLE in the %s case, with size %d and starting interval [%d, %d]:\n", 
-				caseStrings[state.caseType], d, x, y );
 		printState(state.phi, lo, d);
 		stdout_mutex.unlock();
 	}

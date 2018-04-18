@@ -144,7 +144,7 @@ Formula parseFormula(const std::string& line, TokInfo& token, InputClauses& phi)
 	}
 
 	for(auto c = text.begin(); c != text.end(); c++) {
-		if (!std::isalnum(*c)) return Formula::create(INVALID, 0);
+		if (!std::isalnum(*c)) return Formula::create(INVALID_FORMULA, 0);
 	}
 
 	for(size_t i = 0; i < phi.labels.size(); i++) {
@@ -183,7 +183,7 @@ InputClauses parseFile(const char* path) {
 		
 		if (line.substr(token.pos, token.len).compare("[U]") != 0) {
 			auto f = parseFormula(line, token, phi);
-			if (f.type == INVALID) exitError("This is not a valid formula.", lineNum, line.substr(token.pos, token.len));
+			if (f.type == INVALID_FORMULA) exitError("This is not a valid formula.", lineNum, line.substr(token.pos, token.len));
 			phi.facts.push_back(f);
 			continue;
 		} 
@@ -193,7 +193,7 @@ InputClauses parseFile(const char* path) {
 			if (!findToken(cline, token)) exitError("Missing formula at the end of line.", lineNum, line);
 
 			auto f = parseFormula(line, token, phi);
-			if (f.type == INVALID) exitError("This is not a valid formula.", lineNum, line.substr(token.pos, token.len));
+			if (f.type == INVALID_FORMULA) exitError("This is not a valid formula.", lineNum, line.substr(token.pos, token.len));
 			clause.push_back(f);
 
 			hasNext = findToken(cline, token);

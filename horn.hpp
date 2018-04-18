@@ -23,21 +23,23 @@ enum FormulaType {
 	BOXA,
 	BOXA_BAR,
 	CLAUSE,
-	INVALID,
+	INVALID_FORMULA,
 };
 
 enum Case {
 	FINITE,
 	NATURAL,
 	DISCRETE,
-	ALL,
+	ALL_CASES,
+	INVALID_CASE,
 };
 
 const char *caseStrings[] = {
 	"FINITE",
 	"NATURAL",
 	"DISCRETE",
-	"ALL",
+	"ALL_CASES",
+	"INVALID",
 };
 
 
