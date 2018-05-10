@@ -294,6 +294,7 @@ int main(int argc, char **argv) {
 	std::string fileName, caseName;
 	int numThreads, numLetters, numClauses, batchSize, maxFalseClauses;
 
+	// reading all command line parameters
 	bench = cmdl[{"-b", "--bench"}];
 	verbose = cmdl[{"-v", "--verbose"}];
 	cmdl({"-f", "--file"}, "NOFILE") >> fileName;
@@ -322,6 +323,7 @@ int main(int argc, char **argv) {
 		print_messages = true;
 	}
 
+	// in case no input file is provided, the input is generated automatically
 	if (fileName == "NOFILE") {
 
 		std::vector<std::string> labels;
@@ -349,7 +351,8 @@ int main(int argc, char **argv) {
 
 		if (bench) {
 
-			printf("%s\t%s\t%s\t%s\t%s\n", "NUM_LETTERS", "NUM_CLAUSES", "MODEL_SIZE", "SATISFIED", "TIME(s)");
+			printf("%s\t%s\t%s\t%s\t%s\n", 
+				"NUM_LETTERS", "NUM_CLAUSES", "MODEL_SIZE", "SATISFIED", "TIME(s)");
 			// reduce the number of clauses by removing the ones that are not satisfiable
 			{
 				print_messages = false;
@@ -364,12 +367,14 @@ int main(int argc, char **argv) {
 				if (verbose) { print_messages = true; }
 			}
 
+			// starts multiple worker threads
 			std::vector<std::thread> threads;
 			for (int threadId = 0; threadId < numThreads; threadId++) {
-				std::thread th(workerLoop, std::ref(clauses), std::ref(inputTemplate), caseType, numClauses, batchSize, maxFalseClauses);
+				std::thread th(
+					workerLoop, std::ref(clauses), std::ref(inputTemplate), 
+					caseType, numClauses, batchSize, maxFalseClauses);
 				threads.push_back(std::move(th));
 			}
-
 			for (auto &th : threads) {
 				th.join();
 			}
@@ -385,6 +390,7 @@ int main(int argc, char **argv) {
 	} else {
 		InputClauses phi = parseFile(fileName.c_str());
 
+		// if the user wants to run all cases run then in different threads
 		if (caseType == ALL_CASES) {
 			std::vector<std::thread> threads;
 			threads.push_back(std::thread(runCheckAndLog, std::ref(phi), FINITE));
@@ -407,15 +413,16 @@ int main(int argc, char **argv) {
 Model check(InputClauses &phi, Case caseType) {
 	int min, max;
 	switch (caseType) {
-		case FINITE:	min = 2; break;
-		case NATURAL:	min = 3; break;
-		case DISCRETE:	min = 4; break;
-		default:		return Model::unsatisfied();
+		case FINITE: min = 2; break;
+		case NATURAL: min = 3; break;
+		case DISCRETE: min = 4; break;
+		default: return Model::unsatisfied();
 	}
 	max = min + 6 * phi.rules.size(); 
 
 	if (print_messages) {
 		stdout_mutex.lock();
+		printf("Input:\n");
 		print(phi);
 		stdout_mutex.unlock();
 	}
@@ -433,7 +440,9 @@ Model check(InputClauses &phi, Case caseType) {
 		}
 	}
 
-	int xmin = (caseType == DISCRETE);
+	// if the case type is discrete we need to keep one point at the start
+	// free for the expand operation
+	int xmin = (caseType == DISCRETE) ? 1 : 0;
 
 	for (int k = min; k <= max; k++) {
 		int ymax = k - (caseType != FINITE);
