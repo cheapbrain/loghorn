@@ -145,6 +145,7 @@ void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> 
 		if (depth > 0) {
 			if (tempsize == 0 || newSet.size() <= tempsize+1) {
 				buildSet(old, out, newSet, i + 1, depth - 1, size);
+				
 			}
 		} else if (newSet.size() == size+1) {
 			out.push_back(newSet);
