@@ -145,6 +145,7 @@ void buildSet(std::vector<std::vector<int>> &old, std::vector<std::vector<int>> 
 		if (depth > 0) {
 			if (tempsize == 0 || newSet.size() <= tempsize+1) {
 				buildSet(old, out, newSet, i + 1, depth - 1, size);
+				
 			}
 		} else if (newSet.size() == size+1) {
 			out.push_back(newSet);
@@ -270,6 +271,7 @@ int main(int argc, char **argv) {
 	std::string fileName, caseName;
 	int numThreads, numLetters, numClauses, batchSize, maxFalseClauses, clauseLen;
 
+	// reading all command line parameters
 	bench = cmdl[{"-b", "--bench"}];
 	autoStop = cmdl[{"-s", "--stop"}];
 	verbose = cmdl[{"-v", "--verbose"}];
@@ -301,6 +303,7 @@ int main(int argc, char **argv) {
 		print_messages = true;
 	}
 
+	// in case no input file is provided, the input is generated automatically
 	if (fileName == "NOFILE") {
 
 		std::vector<std::string> labels;
@@ -315,13 +318,37 @@ int main(int argc, char **argv) {
 
 		if (bench) {
 
+<<<<<<< HEAD
 			printf("%s\t%s\t%s\t%s\t%s\n", "NUM_LETTERS", "NUM_CLAUSES", "MODEL_SIZE", "SATISFIED", "TIME(s)");
 			std::vector<std::thread> threads;
 			for (int threadId = 0; threadId < numThreads; threadId++) {
 				std::thread th(workerLoop, caseType, numClauses, numLetters, clauseLen, batchSize, maxFalseClauses, autoStop);
-				threads.push_back(std::move(th));
+=======
+			printf("%s\t%s\t%s\t%s\t%s\n", 
+				"NUM_LETTERS", "NUM_CLAUSES", "MODEL_SIZE", "SATISFIED", "TIME(s)");
+			// reduce the number of clauses by removing the ones that are not satisfiable
+			{
+				print_messages = false;
+				std::vector<Clause> tempClauses;
+				for (auto i = clauses.size(); i-- > 0; ) {
+					inputTemplate.rules.push_back(clauses[i]);
+					Model model = check(inputTemplate, caseType);
+					if (model.satisfied) { tempClauses.push_back(clauses[i]); }
+					inputTemplate.rules.clear();
+				}
+				clauses = tempClauses;
+				if (verbose) { print_messages = true; }
 			}
 
+			// starts multiple worker threads
+			std::vector<std::thread> threads;
+			for (int threadId = 0; threadId < numThreads; threadId++) {
+				std::thread th(
+					workerLoop, std::ref(clauses), std::ref(inputTemplate), 
+					caseType, numClauses, batchSize, maxFalseClauses);
+>>>>>>> c4c3463e25762caaa0ba8186dfa8bf8fab985f26
+				threads.push_back(std::move(th));
+			}
 			for (auto &th : threads) {
 				th.join();
 			}
@@ -337,6 +364,7 @@ int main(int argc, char **argv) {
 	} else {
 		InputClauses phi = parseFile(fileName.c_str());
 
+		// if the user wants to run all cases run then in different threads
 		if (caseType == ALL_CASES) {
 			std::vector<std::thread> threads;
 			threads.push_back(std::thread(runCheckAndLog, std::ref(phi), FINITE));
@@ -359,15 +387,16 @@ int main(int argc, char **argv) {
 Model check(InputClauses &phi, Case caseType) {
 	int min, max;
 	switch (caseType) {
-		case FINITE:	min = 2; break;
-		case NATURAL:	min = 3; break;
-		case DISCRETE:	min = 4; break;
-		default:		return Model::unsatisfied();
+		case FINITE: min = 2; break;
+		case NATURAL: min = 3; break;
+		case DISCRETE: min = 4; break;
+		default: return Model::unsatisfied();
 	}
 	max = min + 6 * phi.rules.size(); 
 
 	if (print_messages) {
 		stdout_mutex.lock();
+		printf("Input:\n");
 		print(phi);
 		stdout_mutex.unlock();
 	}
@@ -385,7 +414,9 @@ Model check(InputClauses &phi, Case caseType) {
 		}
 	}
 
-	int xmin = (caseType == DISCRETE);
+	// if the case type is discrete we need to keep one point at the start
+	// free for the expand operation
+	int xmin = (caseType == DISCRETE) ? 1 : 0;
 
 	for (int k = min; k <= max; k++) {
 		int ymax = k - (caseType != FINITE);
