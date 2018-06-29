@@ -1,6 +1,9 @@
 
 #include "horn.hpp"
 
+std::mt19937 rng;
+
+
 Clause newClause(const std::vector<int>& arr) {
 	Clause c;
 	for (auto i = 0U; i < arr.size(); i += 2) {
@@ -20,14 +23,18 @@ std::string numToLabel(int n) {
 }
 
 int rand(int max) {
-	return rand() % max;
+	std::uniform_int_distribution<int> dis(0, max-1);
+	int n = dis(rng);
+	return n;
 }
 
 float frand() {
-	return (float)rand() / RAND_MAX;
+	std::uniform_real_distribution<float> dis(0.f,1.f);
+	float f = dis(rng);
+	return f;
 }
 
-InputClauses randomInput(int n_clauses, int letters, int clause_len, float falsehood_rate) {
+InputClauses randomInput(int n_clauses, int letters, int clause_len, int max_falsehood) {
 	InputClauses phi = {};
 	phi.labels.push_back("F");
 	phi.labels.push_back("T");
@@ -57,9 +64,10 @@ InputClauses randomInput(int n_clauses, int letters, int clause_len, float false
 		std::vector<Formula> availableSymbols = symbols;
 		for (int j = 0; j < clause_len; j++) {
 
-			if ((j == clause_len-1) && frand() < falsehood_rate) {
+			int put_falsehood = (max_falsehood > 0);
+			if ((j == clause_len-1) && frand() < 0.5f * put_falsehood) {
 				c.push_back(Formula::falsehood());
-
+				max_falsehood--;
 			} else {
 				int ns = availableSymbols.size();
 				int index = rand(ns);
