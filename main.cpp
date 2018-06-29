@@ -317,36 +317,10 @@ int main(int argc, char **argv) {
 		inputTemplate.facts.push_back(Formula::create(LETTER, 2));
 
 		if (bench) {
-
-<<<<<<< HEAD
 			printf("%s\t%s\t%s\t%s\t%s\n", "NUM_LETTERS", "NUM_CLAUSES", "MODEL_SIZE", "SATISFIED", "TIME(s)");
 			std::vector<std::thread> threads;
 			for (int threadId = 0; threadId < numThreads; threadId++) {
 				std::thread th(workerLoop, caseType, numClauses, numLetters, clauseLen, batchSize, maxFalseClauses, autoStop);
-=======
-			printf("%s\t%s\t%s\t%s\t%s\n", 
-				"NUM_LETTERS", "NUM_CLAUSES", "MODEL_SIZE", "SATISFIED", "TIME(s)");
-			// reduce the number of clauses by removing the ones that are not satisfiable
-			{
-				print_messages = false;
-				std::vector<Clause> tempClauses;
-				for (auto i = clauses.size(); i-- > 0; ) {
-					inputTemplate.rules.push_back(clauses[i]);
-					Model model = check(inputTemplate, caseType);
-					if (model.satisfied) { tempClauses.push_back(clauses[i]); }
-					inputTemplate.rules.clear();
-				}
-				clauses = tempClauses;
-				if (verbose) { print_messages = true; }
-			}
-
-			// starts multiple worker threads
-			std::vector<std::thread> threads;
-			for (int threadId = 0; threadId < numThreads; threadId++) {
-				std::thread th(
-					workerLoop, std::ref(clauses), std::ref(inputTemplate), 
-					caseType, numClauses, batchSize, maxFalseClauses);
->>>>>>> c4c3463e25762caaa0ba8186dfa8bf8fab985f26
 				threads.push_back(std::move(th));
 			}
 			for (auto &th : threads) {
