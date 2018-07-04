@@ -117,11 +117,13 @@ InputClauses randomInput2 (int n_clauses, int letters) {
 		symbols.push_back(Formula::create(LETTER, i + 2));
 	}
 
+	int min_clause = letters * 3;
 	for (int i = 0; i < n_clauses; i++) {
 		std::vector<int> buff;
 		Clause c;
 
 		int clause_len = rand(2, letters * 3 + 1);
+		if (clause_len < min_clause) min_clause = clause_len;
 
 		std::vector<Formula> availableSymbols = symbols;
 		for (int j = 0; j < clause_len; j++) {
@@ -144,7 +146,7 @@ InputClauses randomInput2 (int n_clauses, int letters) {
 	}
 
 	std::vector<Formula> availableSymbols = symbols;
-	int num_facts = rand(1, symbols.size()+1);
+	int num_facts = min_clause;
 	for (int i = 0; i < num_facts; i++) {
 		int ns = availableSymbols.size();
 		int index = rand(ns);
