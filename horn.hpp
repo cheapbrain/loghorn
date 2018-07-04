@@ -90,6 +90,7 @@ struct FormulaHash {
 
 typedef std::unordered_set<Formula, FormulaHash> FormulaSet;
 typedef std::vector<Formula> FormulaVector;
+// since the array isn't ordered we can swap elements and delete in constant time
 inline void eraseFast(FormulaVector& v, int i) {
 	int last = v.size() - 1;
 	if (i > last) return;
@@ -145,9 +146,8 @@ void printInterval(FILE *stream, const InputClauses& phi, const Interval& interv
 void printState(FILE *stream, const InputClauses& phi, IntervalVector<FormulaSet> &intervals, int d);
 void printState(FILE *stream, const InputClauses& phi, IntervalVector<FormulaVector> &intervals, int d);
 
-/* Parse / Generator Utilities */
+/* Parser\\Generator Utilities */
 std::string numToLabel(int n);
 InputClauses parseFile(const char* path);
-InputClauses randomInput(int n_clauses, int letters, int clause_len);
-
+InputClauses randomInput(int n_clauses, int letters, int clause_len, int max_falsehood);
 

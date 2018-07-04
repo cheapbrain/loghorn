@@ -202,7 +202,7 @@ std::vector<InputClauses> genInputBatch(int nClauses, int nLetters, int clauseLe
 	std::vector<InputClauses> batch(batchSize);
 
 	for (auto &phi : batch) {
-		phi = randomInput(nClauses, nLetters, clauseLen, maxFalseClauses);
+		phi = randomInput2(nClauses, nLetters);
 	}
 	generate_mutex.unlock();
 

@@ -28,6 +28,10 @@ int rand(int max) {
 	return n;
 }
 
+int rand(int min, int max) {
+	return rand(max - min) + min;
+}
+
 float frand() {
 	std::uniform_real_distribution<float> dis(0.f,1.f);
 	float f = dis(rng);
@@ -84,6 +88,64 @@ InputClauses randomInput(int n_clauses, int letters, int clause_len, int max_fal
 
 	std::vector<Formula> availableSymbols = symbols;
 	for (int i = 0; i < clause_len - 1; i++) {
+		int ns = availableSymbols.size();
+		int index = rand(ns);
+		Formula f = availableSymbols[index];
+		availableSymbols[index] = availableSymbols[ns - 1];
+		availableSymbols.resize(ns - 1);
+		phi.facts.push_back(f);
+	}
+
+	return phi;
+}
+
+InputClauses randomInput2 (int n_clauses, int letters) {
+	InputClauses phi = {};
+	phi.labels.push_back("F");
+	phi.labels.push_back("T");
+
+	std::vector<Formula> symbols;
+	//symbols.push_back(Formula::create(BOXA, 0));
+	//symbols.push_back(Formula::create(BOXA_BAR, 0));
+
+	for (int i = 0; i < letters; i++) {
+		std::string label = numToLabel(i);
+		phi.labels.push_back(label);
+
+		symbols.push_back(Formula::create(BOXA_BAR, i + 2));
+		symbols.push_back(Formula::create(BOXA, i + 2));
+		symbols.push_back(Formula::create(LETTER, i + 2));
+	}
+
+	for (int i = 0; i < n_clauses; i++) {
+		std::vector<int> buff;
+		Clause c;
+
+		int clause_len = rand(2, letters * 3 + 1);
+
+		std::vector<Formula> availableSymbols = symbols;
+		for (int j = 0; j < clause_len; j++) {
+
+			if ((j == clause_len - 1) && frand() < 0.5f) {
+				c.push_back(Formula::falsehood());
+			}
+			else {
+				int ns = availableSymbols.size();
+				int index = rand(ns);
+				Formula f = availableSymbols[index];
+				availableSymbols[index] = availableSymbols[ns - 1];
+				availableSymbols.resize(ns - 1);
+				c.push_back(f);
+			}
+
+		}
+		phi.rules.push_back(c);
+
+	}
+
+	std::vector<Formula> availableSymbols = symbols;
+	int num_facts = rand(1, symbols.size()+1);
+	for (int i = 0; i < num_facts; i++) {
 		int ns = availableSymbols.size();
 		int index = rand(ns);
 		Formula f = availableSymbols[index];
