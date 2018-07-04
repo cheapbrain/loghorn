@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-
-echo "hello world"
-
 ./horn -b -m="discrete" -t=16 -l=1 -c=1 --clause_len=3 --max_false_clauses=1 --stop --batch_size=5
 ./horn -b -m="discrete" -t=16 -l=2 -c=1 --clause_len=3 --max_false_clauses=1 --stop --batch_size=5
 ./horn -b -m="discrete" -t=16 -l=3 -c=1 --clause_len=3 --max_false_clauses=1 --stop --batch_size=5
